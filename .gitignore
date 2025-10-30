@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
+*.sqlite3
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm / VSCode
+.idea/
+.vscode/
+
+# Docker
+*.env
+docker-compose.override.yml
+*.pid
+*.sock
+
+# Byte-compiled / C extensions
+*.so
+
+# Distribution / Packaging
+.Python
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+
+# macOS
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+*.h5
+*.pkl
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# MySQL / PostgreSQL
+*.sql
+*.dump
