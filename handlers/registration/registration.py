@@ -2,7 +2,6 @@ from aiogram import F, types, Router, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from sources.postgres import sql
 
 from states.states_registration import RegistrationStates
 

@@ -1,14 +1,14 @@
 from aiogram import types, Router
 from aiogram.filters import Command
+from database.queries import check_user
 
-from sources.postgres.sql import create_user, check_user
 
 router = Router()
 
 @router.message(Command('start'))
 async def start(message: types.Message):
     user_id = message.from_user.id
-    exist = check_user(user_id)
+    exist = await check_user(user_id)
     #TODO просмотр анкеты и там лайков, сообщений
     if exist:
         kb = [
