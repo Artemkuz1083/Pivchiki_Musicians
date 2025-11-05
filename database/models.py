@@ -2,7 +2,7 @@ from sqlalchemy import (
     BigInteger, Integer, String, ForeignKey, Table, Column, Enum as SQLEnum
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from typing import List
+from typing import List, Optional
 from .enums import PerformanceExperience
 
 class Base(DeclarativeBase):
@@ -20,19 +20,18 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    age: Mapped[int] = mapped_column(Integer, nullable=False)
-    city: Mapped[str] = mapped_column(String, nullable=False)
-    theoretical_knowledge_level: Mapped[int] = mapped_column(Integer, nullable=False)
-    has_performance_experience: Mapped[PerformanceExperience] = mapped_column(
-        SQLEnum(PerformanceExperience), nullable=False
-    )
 
-    genres: Mapped[List[str]] = relationship(
-        secondary=user_genre,
-        collection_class=list,
-        viewonly=False
+    city: Mapped[str] = mapped_column(String, nullable=False)
+
+    name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    theoretical_knowledge_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    has_performance_experience: Mapped[Optional[PerformanceExperience]] = mapped_column(
+        SQLEnum(PerformanceExperience), nullable=True
     )
+    photo_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    audio_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    external_link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     instruments: Mapped[List["Instrument"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -44,6 +43,6 @@ class Instrument(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    proficiency_level: Mapped[int] = mapped_column(Integer, nullable=False)
+    proficiency_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="instruments")
