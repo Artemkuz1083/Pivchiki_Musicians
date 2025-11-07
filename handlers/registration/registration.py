@@ -8,7 +8,7 @@ from states.states_registration import RegistrationStates
 
 router = Router()
 
-@router.message(F.text.endswith("Let's go"))
+@router.message(F.text.endswith("Let's go") | F.text.endswith("Создать анкету"))
 async def start_search(message: types.Message, state: FSMContext):
 
     await state.set_state(RegistrationStates.name)
