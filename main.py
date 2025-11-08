@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from asyncio import run
 from aiogram import Bot, Dispatcher
 from handlers import start
+from handlers.profile import profile
 from handlers.registration import registration
 from database.session import init_db
 
@@ -18,8 +19,8 @@ dp = Dispatcher()
 
 async def main():
     await init_db()
-
     dp.include_router(registration.router)
+    dp.include_router(profile.router)
     dp.include_router(start.router)
     await dp.start_polling(bot)
 
