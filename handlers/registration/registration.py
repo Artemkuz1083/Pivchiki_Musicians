@@ -285,8 +285,6 @@ async def own_genre(message: types.Message, state: FSMContext):
     data = await state.get_data()
     own_user_genre = data.get("own_user_genre", [])
     user_choice = data.get("user_choice_genre", [])
-    all_genres_user = own_user_genre + user_choice
-    await state.update_data(all_genres_user=all_genres_user)
     own_user_genre.append(inst)
     msg_text = (f"Свой вариант:{own_user_genre}\n"
                 "Отлично! Теперь выберите жанры в которых вы играете:")
@@ -297,7 +295,9 @@ async def own_genre(message: types.Message, state: FSMContext):
 async def done(callback: types.CallbackQuery, state: FSMContext):
     """Обработка кнопки готово для жанров"""
     data = await state.get_data()
-    all_genres_user = data.get("all_genres_user", [])
+    user_choice = data.get("user_choice_genre", [])
+    own_user_genre = data.get("own_user_genre", [])
+    all_genres_user = user_choice + own_user_genre
     user_id = data.get("user_id")
 
     try:
