@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    BigInteger, Integer, String, ForeignKey, Table, Column, Enum as SQLEnum
+    BigInteger, Integer, String, ForeignKey, Table, Column, Enum as SQLEnum, ARRAY
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List, Optional
@@ -21,7 +21,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
-    city: Mapped[str] = mapped_column(String, nullable=False)
+    city: Mapped[str] = mapped_column(String, nullable=True)
 
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -34,8 +34,12 @@ class User(Base):
     external_link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     instruments: Mapped[List["Instrument"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="joined"
     )
+
+    genres: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
 
 class Instrument(Base):
     __tablename__ = "instruments"

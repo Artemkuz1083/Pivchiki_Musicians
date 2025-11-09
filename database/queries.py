@@ -4,7 +4,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from .enums import PerformanceExperience
-from .models import User
+from .models import User, Instrument
 from .session import AsyncSessionLocal
 
 async def check_user(user_id: int) -> bool:
@@ -13,17 +13,18 @@ async def check_user(user_id: int) -> bool:
         return result.scalar_one_or_none() is not None
 
 
+
 async def get_user(user_id: int) -> User | None:
     async with AsyncSessionLocal() as session:
         stmt = (
             select(User)
             .where(User.id == user_id)
             .options(selectinload(User.instruments))
-            .options(selectinload(User.genres))
         )
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
         return user
+
 
 async def update_user(user_id: int, **kwargs) -> None:
     async with AsyncSessionLocal() as session:
@@ -107,6 +108,64 @@ async def save_user_profile_photo(user_id: int, file_id: str) -> None:
             update(User)
             .where(User.id == user_id)
             .values(photo_path=file_id)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def update_user_name(user_id: int, name: str) -> None:
+    """Обновляет имя пользователя"""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(name=name)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def update_user_city(user_id: int, city: str) -> None:
+    """Обновляет город"""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(city=city)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def update_user_instruments(user_id: int, instruments: List[Instrument]):
+    """Обновляет список инструментов пользователя"""
+    async with AsyncSessionLocal() as session:
+        # Получаем пользователя
+        user = await session.get(User, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Обновляем relationship
+        user.instruments = instruments  # Это заменяет текущие инструменты
+
+        session.add(user)
+        await session.commit()
+
+async def create_user(user_id: int):
+    """Создает пользователя"""
+    async with AsyncSessionLocal() as session:
+        existing_user = await session.get(User, user_id)
+        if existing_user:
+            return existing_user
+        user = User(id=user_id)
+        session.add(user)
+        await session.commit()
+
+async def update_user_genres(user_id, genres: List[str]):
+    """Обновляет список жанров"""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(genres=genres)
         )
         await session.execute(stmt)
         await session.commit()
