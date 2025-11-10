@@ -13,3 +13,5 @@ class ProfileStates(StatesGroup):
     uploading_files = State()
     uploading_profile_photo = State()
     filling_external_link = State()
+    filling_name = State()
+    filling_city = State()
