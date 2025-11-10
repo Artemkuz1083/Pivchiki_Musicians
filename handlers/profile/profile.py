@@ -796,7 +796,7 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
         parse_mode='Markdown'
     )
 
-    await state.set_state(RegistrationStates.genre)
+    await state.set_state(ProfileStates.genre)
 
 @router.callback_query(F.data == "edit_instruments")
 async def start_editing_instruments(callback: types.CallbackQuery, state: FSMContext):
@@ -903,9 +903,9 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
         parse_mode='Markdown'
     )
 
-    await state.set_state(RegistrationStates.genre)
+    await state.set_state(ProfileStates.genre)
 
-@router.callback_query(F.data.startswith("genre_"), RegistrationStates.genre)
+@router.callback_query(F.data.startswith("genre_"), ProfileStates.genre)
 async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
     """Обработка клавиатуры для жанров"""
     await callback.answer()
@@ -921,7 +921,7 @@ async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
             text="Напишите жанр:",
             reply_markup=back_button
         )
-        await state.set_state(RegistrationStates.own_genre)
+        await state.set_state(ProfileStates.own_genre)
         return
 
     # Логика выбора/снятия выбора
@@ -935,7 +935,7 @@ async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.update_data(user_choice_genre=user_choice)
 
-@router.message(F.text, RegistrationStates.own_genre)
+@router.message(F.text, ProfileStates.own_genre)
 async def own_genre(message: types.Message, state: FSMContext):
     """Обработка кнопки свой вариант для жанров. Сохраняем собственный жанр."""
     new_genre = message.text
@@ -950,12 +950,13 @@ async def own_genre(message: types.Message, state: FSMContext):
                 "Отлично! Теперь выберите жанры в которых вы играете:")
 
     await message.answer(text=msg_text, reply_markup=make_keyboard_for_genre(user_choice))
-    await state.set_state(RegistrationStates.genre)
+    await state.set_state(ProfileStates.genre)
 
-@router.callback_query(F.data == "done_genres", RegistrationStates.genre)
+@router.callback_query(F.data == "done_genres", ProfileStates.genre)
 async def done_genres(callback: types.CallbackQuery, state: FSMContext):
     """Обработка кнопки готово для жанров. Сохранение и возврат в профиль."""
     await callback.answer()
+    logger.info("ты в методе done_genres")
     data = await state.get_data()
     user_choice = data.get("user_choice_genre", [])
     own_user_genre = data.get("own_user_genre", [])
@@ -969,6 +970,7 @@ async def done_genres(callback: types.CallbackQuery, state: FSMContext):
 
     try:
         await update_user_genres(user_id, all_genres_user)
+        logger.info("Жанры успешно обновлены в БД")
     except Exception as e:
         logger.error(f"Ошибка при сохранении жанров: {e}")
         await state.set_state(ProfileStates.select_param_to_fill)
