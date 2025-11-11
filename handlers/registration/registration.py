@@ -1,4 +1,4 @@
-from aiogram import F, types, Router, Bot
+from aiogram import F, types, Router, Bot, flags
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -92,6 +92,10 @@ async def get_city(message: types.Message, state: FSMContext):
     await state.update_data(user_choice_inst=[])
     await state.update_data(own_user_inst=[])
 
+@router.message(F.text.startswith("/"), RegistrationStates.instrument)
+async def block_commands_during_registration(message: types.Message):
+    await message.answer("Закончите регистрацию, чтобы выйти в главное меню")
+    return
 
 @router.callback_query(F.data.startswith("inst_"), RegistrationStates.instrument)
 async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
@@ -170,7 +174,7 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
     logger.info("instruments_list для БД: %s", instruments_list)
 
     try:
-        await update_user_instruments(user_id=user_id, instruments=instruments_list)
+        await update_user_instruments_for_registration(user_id=user_id, instruments=instruments_list)
         logger.info("Инструменты успешно обновлены в БД")
     except Exception as e:
         logger.error("Ошибка при добавлении инструмента в БД: %s", e)

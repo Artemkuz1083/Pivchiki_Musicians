@@ -201,6 +201,21 @@ async def update_user_instruments(user_id: int, instrument_names: list):
         user.instruments = new_instrument_objects
         await session.commit()
 
+async def update_user_instruments_for_registration(user_id: int, instruments: List[Instrument]):
+    """Обновляет список инструментов пользователя"""
+    async with AsyncSessionLocal() as session:
+        # Получаем пользователя
+        user = await session.get(User, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        # Обновляем relationship
+        user.instruments = instruments  # Это заменяет текущие инструменты
+
+        session.add(user)
+        await session.commit()
+
+
 async def update_user_about_me(user_id: int, about_me_text: str):
     async with AsyncSessionLocal() as session:
         user = await session.get(User, user_id)
