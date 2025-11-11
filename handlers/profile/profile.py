@@ -93,8 +93,6 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
         f"**Инструменты:**\n"
         f"{instruments_display}\n\n"
 
-        "Выберите следующий параметр для изменения или нажмите 'Назад':"
-
     )
 
     if user_obj.photo_path:
