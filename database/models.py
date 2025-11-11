@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    BigInteger, Integer, String, ForeignKey, Table, Column, Enum as SQLEnum, ARRAY
+    BigInteger, Integer, String, ForeignKey, Table, Column, Enum as SQLEnum, ARRAY, Text
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List, Optional
@@ -32,6 +32,7 @@ class User(Base):
     photo_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     audio_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     external_link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    about_me: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     instruments: Mapped[List["Instrument"]] = relationship(
         back_populates="user",

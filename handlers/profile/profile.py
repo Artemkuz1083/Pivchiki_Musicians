@@ -13,7 +13,7 @@ from database.enums import PerformanceExperience
 from database.models import Instrument
 from database.queries import update_user, update_instrument_level, update_user_experience, update_user_theory_level, \
     save_user_profile_photo, save_user_audio, get_user, update_user_city, update_user_name, update_user_genres, \
-    update_user_instruments
+    update_user_instruments, update_user_about_me
 from handlers.registration.registration import make_keyboard_for_instruments, logger
 from states.states_profile import ProfileStates
 
@@ -70,6 +70,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     else:
         instruments_display = "Не указаны"
 
+    about_me_display = user_obj.about_me if user_obj.about_me else "Не указано"
     external_link_display = user_obj.external_link if user_obj.external_link else "Не указана"
 
     profile_text = (
@@ -78,7 +79,10 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
         f"**Имя:** {user_obj.name or 'Не указано'}\n"
         f"**Возраст:** {user_obj.age or 'Не указано'}\n"
         f"**Город:** {user_obj.city or 'Не указано'}\n\n"
-
+        
+        f"**О себе:**\n" 
+        f"{about_me_display}\n\n"
+                                                         
         f"**Уровень теоретических знаний:** {stars_knowledge}\n"
         f"**Опыт выступлений:** {experience_display or 'Не указано'}\n\n"
 
@@ -185,6 +189,7 @@ def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="Демонстрационные файлы", callback_data="edit_files"),
         InlineKeyboardButton(text="Внешняя ссылка", callback_data="edit_link"),
         InlineKeyboardButton(text="Фото", callback_data="edit_photo"),
+        InlineKeyboardButton(text="О себе", callback_data="edit_about_me"),
     )
 
     builder.adjust(2)
@@ -1224,4 +1229,47 @@ async def done_genres(callback: types.CallbackQuery, state: FSMContext):
         callback,
         user_id,
         success_message="Жанры успешно обновлены!"
+    )
+
+@router.callback_query(F.data == "edit_about_me")
+async def ask_for_about_me(callback: types.CallbackQuery, state: FSMContext):
+    """Срабатывает при нажатии на 'О себе' и запрашивает текст."""
+    await callback.answer()
+    await state.set_state(ProfileStates.filling_about_me)
+
+    back_button = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_params")]])
+
+    await callback.message.edit_text(
+        "**Введите краткий рассказ о себе**\n\n",
+        parse_mode='Markdown',
+        reply_markup=back_button
+    )
+
+@router.message(ProfileStates.filling_about_me, F.text)
+async def process_new_about_me(message: types.Message, state: FSMContext):
+    """Обрабатывает введенный текст 'О себе', сохраняет его и выводит обновленную анкету."""
+    user_id = message.from_user.id
+    about_me_text = message.text.strip()
+
+    if len(about_me_text) > 1000:
+        await message.answer(
+            "Текст слишком длинный (максимум 1000 символов). Введите более краткое описание."
+        )
+        return
+
+    try:
+        await update_user_about_me(user_id, about_me_text)
+    except Exception as e:
+        print(f"Ошибка сохранения 'О себе' в БД: {e}")
+        await message.answer("Произошла ошибка при сохранении текста. Пожалуйста, попробуйте позже.")
+        await state.set_state(ProfileStates.select_param_to_fill)
+        return
+
+    await state.set_state(ProfileStates.select_param_to_fill)
+
+    await send_updated_profile(
+        message,
+        user_id,
+        success_message="Раздел 'О себе' успешно обновлен!"
     )

@@ -200,3 +200,11 @@ async def update_user_instruments(user_id: int, instrument_names: list):
 
         user.instruments = new_instrument_objects
         await session.commit()
+
+async def update_user_about_me(user_id: int, about_me_text: str):
+    async with AsyncSessionLocal() as session:
+        user = await session.get(User, user_id)
+        if user:
+            user.about_me = about_me_text
+            await session.commit()
+
