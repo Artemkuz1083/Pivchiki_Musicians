@@ -1,6 +1,7 @@
 from typing import List
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from .enums import PerformanceExperience
@@ -169,3 +170,41 @@ async def update_user_genres(user_id, genres: List[str]):
         )
         await session.execute(stmt)
         await session.commit()
+
+
+async def update_user_instruments(user_id: int, instrument_names: list):
+    """
+    Обновляет инструменты, создавая и закрывая сессию внутри себя
+    """
+    async with AsyncSessionLocal() as session:
+        # 1. Загружаем пользователя, используя сессию
+        user_stmt = select(User).where(User.id == user_id).options(selectinload(User.instruments))
+        user = (await session.execute(user_stmt)).scalar_one_or_none()
+
+        current_levels = {inst.name: inst.proficiency_level for inst in user.instruments}
+
+        # Удаляем старые записи
+        await session.execute(delete(Instrument).where(Instrument.user_id == user_id))
+
+        new_instrument_objects = []
+        DEFAULT_PROFICIENCY_LEVEL = 1
+
+        for name in instrument_names:
+            level_to_assign = current_levels.get(name, DEFAULT_PROFICIENCY_LEVEL)
+            new_instrument = Instrument(
+                user_id=user_id,
+                name=name,
+                proficiency_level=level_to_assign
+            )
+            new_instrument_objects.append(new_instrument)
+
+        user.instruments = new_instrument_objects
+        await session.commit()
+
+async def update_user_about_me(user_id: int, about_me_text: str):
+    async with AsyncSessionLocal() as session:
+        user = await session.get(User, user_id)
+        if user:
+            user.about_me = about_me_text
+            await session.commit()
+

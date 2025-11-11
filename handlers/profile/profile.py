@@ -1,17 +1,20 @@
 import asyncio
+from typing import List
+
 from aiogram import types, Router, F
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.enums import PerformanceExperience
 from database.models import Instrument
 from database.queries import update_user, update_instrument_level, update_user_experience, update_user_theory_level, \
     save_user_profile_photo, save_user_audio, get_user, update_user_city, update_user_name, update_user_genres, \
-    update_user_instruments
-from handlers.registration.registration import logger
+    update_user_instruments, update_user_about_me
+from handlers.registration.registration import make_keyboard_for_instruments, logger
 from states.states_profile import ProfileStates
 
 router = Router()
@@ -50,8 +53,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     knowledge_level = user_obj.theoretical_knowledge_level if user_obj.theoretical_knowledge_level is not None else 0
     stars_knowledge = rating_to_stars(knowledge_level)
 
-    experience_display = getattr(user_obj.has_performance_experience, 'value',
-                                 str(user_obj.has_performance_experience) or 'Не указано')
+    experience_display = getattr(user_obj.has_performance_experience, 'value', 'Не указано')
 
     genres_list = user_obj.genres or ["Не указано"]
     genres_display = ", ".join(genres_list)
@@ -68,6 +70,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     else:
         instruments_display = "Не указаны"
 
+    about_me_display = user_obj.about_me if user_obj.about_me else "Не указано"
     external_link_display = user_obj.external_link if user_obj.external_link else "Не указана"
 
     profile_text = (
@@ -76,9 +79,12 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
         f"**Имя:** {user_obj.name or 'Не указано'}\n"
         f"**Возраст:** {user_obj.age or 'Не указано'}\n"
         f"**Город:** {user_obj.city or 'Не указано'}\n\n"
-
+        
+        f"**О себе:**\n" 
+        f"{about_me_display}\n\n"
+                                                         
         f"**Уровень теоретических знаний:** {stars_knowledge}\n"
-        f"**Опыт выступлений:** {experience_display}\n\n"
+        f"**Опыт выступлений:** {experience_display or 'Не указано'}\n\n"
 
         f"**Внешняя ссылка:** {external_link_display}\n\n"
 
@@ -142,9 +148,10 @@ def get_instrument_selection_keyboard(instruments: list) -> InlineKeyboardMarkup
     builder = InlineKeyboardBuilder()
 
     for instrument in instruments:
+        encoded_name = instrument.name.replace(" ", "_")
         builder.row(InlineKeyboardButton(
             text=f"{instrument.name} (ур. {instrument.proficiency_level})",
-            callback_data=f"select_inst:{instrument.id}"
+            callback_data=f"edit_instrument_level:{instrument.id}:{encoded_name}"
         ))
 
     builder.row(InlineKeyboardButton(text="Назад", callback_data="back_to_params"))
@@ -169,20 +176,43 @@ def get_experience_selection_keyboard() -> InlineKeyboardMarkup:
 def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
     """Создает клавиатуру для выбора параметров профиля."""
     builder = InlineKeyboardBuilder()
-    builder.row(InlineKeyboardButton(text="Имя", callback_data="edit_name"))
-    builder.row(InlineKeyboardButton(text="Город", callback_data="edit_city"))
-    builder.row(InlineKeyboardButton(text="Жанры", callback_data="edit_genres"))
-    builder.row(InlineKeyboardButton(text="Инструменты", callback_data="edit_instruments"))
-    builder.row(InlineKeyboardButton(text="Возраст", callback_data="edit_age"))
-    builder.row(InlineKeyboardButton(text="Уровень владения", callback_data="edit_level"))
-    builder.row(InlineKeyboardButton(text="Опыт выступлений", callback_data="edit_experience"))
-    builder.row(InlineKeyboardButton(text="Уровень теории", callback_data="edit_theory"))
-    builder.row(InlineKeyboardButton(text="Демонстрационные файлы", callback_data="edit_files"))
-    builder.row(InlineKeyboardButton(text="Внешняя ссылка", callback_data="edit_link"))
-    builder.row(InlineKeyboardButton(text="Фото", callback_data="edit_photo"))
+
+    builder.add(
+        InlineKeyboardButton(text="Имя", callback_data="edit_name"),
+        InlineKeyboardButton(text="Город", callback_data="edit_city"),
+        InlineKeyboardButton(text="Жанры", callback_data="edit_genres"),
+        InlineKeyboardButton(text="Инструменты", callback_data="edit_instruments"),
+        InlineKeyboardButton(text="Возраст", callback_data="edit_age"),
+        InlineKeyboardButton(text="Уровень владения", callback_data="edit_level"),
+        InlineKeyboardButton(text="Опыт выступлений", callback_data="edit_experience"),
+        InlineKeyboardButton(text="Уровень теории", callback_data="edit_theory"),
+        InlineKeyboardButton(text="Демонстрационные файлы", callback_data="edit_files"),
+        InlineKeyboardButton(text="Внешняя ссылка", callback_data="edit_link"),
+        InlineKeyboardButton(text="Фото", callback_data="edit_photo"),
+        InlineKeyboardButton(text="О себе", callback_data="edit_about_me"),
+    )
+
+    builder.adjust(2)
     #builder.row(InlineKeyboardButton(text="Назад", callback_data="back_from_profile"))
     return builder.as_markup()
 
+
+def get_edit_instruments_keyboard(selected_instruments: list) -> InlineKeyboardMarkup:
+    """Создает инлайн-клавиатуру для выбора инструментов в режиме редактирования."""
+    standard_instruments = ["Гитара", "Барабаны", "Синтезатор", "Вокал", "Бас", "Скрипка"]
+
+    builder = InlineKeyboardBuilder()
+
+    for inst in standard_instruments:
+        text = f"✅ {inst}" if inst in selected_instruments else inst
+        builder.row(InlineKeyboardButton(text=text, callback_data=f"edit_inst_{inst}"))
+
+    builder.row(InlineKeyboardButton(text="Свой вариант (введите текстом)", callback_data="input_own_instrument"))
+
+    builder.row(InlineKeyboardButton(text="✅ Готово (Перейти к оценке)", callback_data="instruments_ready_edit"))
+    builder.row(InlineKeyboardButton(text="Назад в меню", callback_data="back_to_params"))
+
+    return builder.as_markup()
 
 def get_theory_level_keyboard_verbal() -> InlineKeyboardMarkup:
     """Создает инлайн-клавиатуру с вербальными градациями уровня теории."""
@@ -197,28 +227,64 @@ def get_theory_level_keyboard_verbal() -> InlineKeyboardMarkup:
     }
     return builder.as_markup()
 
-def get_level_rating_keyboard_verbal(instrument_id: int) -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру с вербальными градациями для уровня владения инструментом (1-5)."""
+def get_theory_level_keyboard_emoji() -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру с градациями уровня теории в виде звезд.
+    """
     builder = InlineKeyboardBuilder()
 
-    # обозначения для уровней 1-5
-    # Ключ: Текстовое отображение | Значение: Уровень (1-5)
-    GRADATIONS = {
-        "Новичок (Только начал)": 1,
-        "Ученик (Осваиваю базу)": 2,
-        "Любитель (Играю уверенно)": 3,
-        "Продвинутый (Могу импровизировать)": 4,
-        "Мастер (Профессиональный уровень)": 5,
-    }
+    builder.row(
+        InlineKeyboardButton(text="❌ (Не знаю теорию)", callback_data="set_theory_level:0")
+    )
 
-    # Создаем кнопки
-    for text, level in GRADATIONS.items():
-        # Callback-данные содержат: "set_level:{instrument_id}:{level}"
-        callback_data = f"set_level:{instrument_id}:{level}"
-        builder.row(InlineKeyboardButton(text=text, callback_data=callback_data))
+    builder.row(
+        InlineKeyboardButton(text="⭐", callback_data="set_theory_level:1"),
+        InlineKeyboardButton(text="⭐⭐", callback_data="set_theory_level:2")
+    )
 
-    # Кнопка "Назад"
-    builder.row(InlineKeyboardButton(text="Назад", callback_data="back_to_params"))
+    builder.row(
+        InlineKeyboardButton(text="⭐⭐⭐", callback_data="set_theory_level:3"),
+        InlineKeyboardButton(text="⭐⭐⭐⭐", callback_data="set_theory_level:4")
+    )
+
+    builder.row(
+        InlineKeyboardButton(text="⭐⭐⭐⭐⭐", callback_data="set_theory_level:5")
+    )
+
+    builder.row(
+        InlineKeyboardButton(text="Назад", callback_data="back_to_params")
+    )
+
+    return builder.as_markup()
+
+
+def get_proficiency_star_keyboard(instrument_id: int) -> InlineKeyboardMarkup:
+    """
+    Создает инлайн-клавиатуру с градациями уровня ВЛАДЕНИЯ (proficiency)
+    в виде звезд (1-5) для конкретного instrument_id.
+    """
+    builder = InlineKeyboardBuilder()
+
+    # "set_level:{instrument_id}:{new_level}"
+    CALLBACK_PREFIX = f"set_level:{instrument_id}"
+
+    builder.row(
+        InlineKeyboardButton(text="⭐", callback_data=f"{CALLBACK_PREFIX}:1"),
+        InlineKeyboardButton(text="⭐⭐", callback_data=f"{CALLBACK_PREFIX}:2")
+    )
+
+    builder.row(
+        InlineKeyboardButton(text="⭐⭐⭐", callback_data=f"{CALLBACK_PREFIX}:3"),
+        InlineKeyboardButton(text="⭐⭐⭐⭐", callback_data=f"{CALLBACK_PREFIX}:4")
+    )
+
+    builder.row(
+        InlineKeyboardButton(text="⭐⭐⭐⭐⭐", callback_data=f"{CALLBACK_PREFIX}:5")
+    )
+
+    builder.row(
+        InlineKeyboardButton(text="Назад", callback_data="back_to_params")
+    )
 
     return builder.as_markup()
 
@@ -227,6 +293,20 @@ def rating_to_stars(level: int) -> str:
         level = 0
     return "⭐️" * level
 
+def get_edit_rating_keyboard(instruments: List) -> InlineKeyboardMarkup:
+    """Создает инлайн-клавиатуру со списком инструментов пользователя для оценки уровня."""
+    builder = InlineKeyboardBuilder()
+
+    for instrument in instruments:
+        # ✅ Уникальный колбэк, использует ID инструмента
+        builder.row(InlineKeyboardButton(
+            text=f"{instrument.name} (Уровень: {instrument.proficiency_level or '?'})",
+            callback_data=f"select_edit_inst:{instrument.id}"
+        ))
+
+    # ✅ Уникальный колбэк "Готово" для завершения
+    builder.row(InlineKeyboardButton(text="✅ Готово (Профиль)", callback_data="rating_done_edit"))
+    return builder.as_markup()
 
 async def _show_profile_logic(event: types.Message | types.CallbackQuery, state: FSMContext):
     """
@@ -259,7 +339,7 @@ async def _show_profile_logic(event: types.Message | types.CallbackQuery, state:
     else:
         reply_keyboard_builder = ReplyKeyboardBuilder()
         reply_keyboard_builder.row(
-            KeyboardButton(text="Создать анкету")
+            KeyboardButton(text="Let's go")
         )
 
         await message_source.answer(
@@ -343,11 +423,15 @@ async def process_new_age(message: types.Message, state: FSMContext):
 
     await message.answer(
         f"**Возраст успешно обновлен!**\n\n"
-        f"Ваш новый возраст: **{new_age}**.\n\n"
-        f"Выберите следующий параметр для изменения:",
-        reply_markup=get_profile_selection_keyboard(),
-        parse_mode='Markdown'
+        f"Ваш новый возраст: **{new_age}**.\n\n",
+        parse_mode='Markdown')
+
+    await send_updated_profile(
+        message,
+        user_id,
+        success_message=f""
     )
+
 
 
 @router.callback_query(F.data == "edit_level")
@@ -379,23 +463,16 @@ async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("select_inst:"), ProfileStates.select_instrument_to_edit)
-async def ask_for_new_level(callback: types.CallbackQuery, state: FSMContext):
-    """Сохраняет ID инструмента и предлагает выбрать уровень с помощью вербальной клавиатуры."""
+@router.callback_query(F.data == "edit_theory")
+async def start_selecting_theory_level(callback: types.CallbackQuery, state: FSMContext):
+    """Срабатывает при нажатии на 'Уровень теории' и показывает клавиатуру со звездами."""
     await callback.answer()
-
-    instrument_id = int(callback.data.split(":")[1])
-    # Сохраняем ID, который будем обновлять
-    await state.update_data(current_instrument_id=instrument_id)
-    # Переводим в состояние ожидания выбора уровня
-    await state.set_state(ProfileStates.filling_level)
-    # Создаем вербальную клавиатуру
-    markup = get_level_rating_keyboard_verbal(instrument_id)
+    await state.set_state(ProfileStates.selecting_theory_level)
 
     await callback.message.edit_text(
-        "**Выберите ваш уровень владения инструментом:**",
-        parse_mode='Markdown',
-        reply_markup=markup
+        "**Выберите ваш уровень теоретических знаний:**",
+        reply_markup=get_theory_level_keyboard_emoji(),
+        parse_mode='Markdown'
     )
 
 
@@ -426,40 +503,28 @@ async def process_new_level_callback(callback: types.CallbackQuery, state: FSMCo
     )
 
 
-@router.message(ProfileStates.filling_level, F.text)
-async def process_new_level(message: types.Message, state: FSMContext):
-    """Обрабатывает введенный уровень владения, сохраняет его и возвращает к выбору параметров."""
-    user_id = message.from_user.id
-    new_level_str = message.text.strip()
-    data = await state.get_data()
-    instrument_id = data.get("current_instrument_id")
+@router.callback_query(F.data.startswith("edit_instrument_level:"), ProfileStates.select_instrument_to_edit)
+async def select_instrument_for_level_edit(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Пользователь выбрал инструмент для редактирования.
+    Показываем ему 'звездную' клавиатуру.
+    """
+    await callback.answer()
 
     try:
-        new_level = int(new_level_str)
-        if not (1 <= new_level <= 5):
-            raise ValueError("Уровень вне диапазона")
-    except ValueError:
-        await message.answer(
-            "**Неверный ввод.** Пожалуйста, введите уровень как целое число от 1 до 5."
-        )
+        parts = callback.data.split(":")
+        instrument_id = int(parts[1])
+        instrument_name = parts[2].replace("_", " ")
+    except (IndexError, ValueError):
+        await callback.message.edit_text("Ошибка выбора инструмента. Попробуйте снова.")
         return
 
-    try:
-        await update_instrument_level(instrument_id=instrument_id, new_level=new_level)
+    await state.set_state(ProfileStates.filling_level)
 
-    except Exception as e:
-        print(f"Ошибка сохранения уровня в БД: {e}")
-        await message.answer("Произошла ошибка при сохранении уровня. Пожалуйста, попробуйте позже.")
-
-    await state.set_state(ProfileStates.select_param_to_fill)
-    await state.clear()
-
-    await message.answer(
-        f"**Уровень владения успешно обновлен!**\n\n"
-        f"Ваш новый уровень: {rating_to_stars(new_level)}.\n\n"
-        f"Выберите следующий параметр для изменения:",
-        reply_markup=get_profile_selection_keyboard(),
-        parse_mode='Markdown'
+    await callback.message.edit_text(
+        f"Инструмент: {instrument_name}\n\n"
+        f"Выберите ваш новый уровень владения им:",
+        reply_markup=get_proficiency_star_keyboard(instrument_id)
     )
 
 
@@ -495,8 +560,13 @@ async def process_experience_type(callback: types.CallbackQuery, state: FSMConte
     await callback.message.edit_text(
         f"**Опыт выступлений обновлен:** {selected_experience.value}.\n\n"
         f"Выберите следующий параметр для изменения:",
-        reply_markup=get_profile_selection_keyboard(),
         parse_mode='Markdown'
+    )
+
+    await send_updated_profile(
+        callback,
+        user_id,
+        success_message=f""
     )
 
 
@@ -535,8 +605,13 @@ async def process_selected_theory_level(callback: types.CallbackQuery, state: FS
         f"**Уровень теории успешно обновлен!**\n\n"
         f"Ваш новый уровень теории: **{new_level}**.\n\n"
         f"Выберите следующий параметр для изменения:",
-        reply_markup=get_profile_selection_keyboard(),
         parse_mode='Markdown'
+    )
+
+    await send_updated_profile(
+        callback,
+        user_id,
+        success_message=f""
     )
 
 
@@ -585,8 +660,13 @@ async def handle_uploaded_audio_content(message: types.Message, state: FSMContex
         await message.answer(
             f"**Демонстрационный {content_type} обновлен!**\n\n"
             f"Выберите следующий параметр для изменения:",
-            reply_markup=get_profile_selection_keyboard(),
             parse_mode='Markdown'
+        )
+
+        await send_updated_profile(
+            message,
+            user_id,
+            success_message=f""
         )
 
 
@@ -645,28 +725,14 @@ async def handle_uploaded_photo(message: types.Message, state: FSMContext):
     await message.answer(
         f"**Фотография профиля успешно обновлена!**\n\n"
         f"Выберите следующий параметр для изменения:",
-        reply_markup=get_profile_selection_keyboard(),
         parse_mode='Markdown'
     )
 
-@router.callback_query(F.data == "back_to_params")
-async def process_back_to_params(callback: types.CallbackQuery, state: FSMContext):
-    """
-    Универсальный хендлер для возврата в меню выбора параметров профиля (ProfileStates.select_param_to_fill).
-    """
-    await callback.answer()
-
-    # Сбрасываем текущее состояние на основное состояние редактирования
-    await state.set_state(ProfileStates.select_param_to_fill)
-
-    await callback.message.edit_text(
-        "**Вы вернулись в меню редактирования.**\n\n"
-        "Выберите следующий параметр для изменения:",
-        reply_markup=get_profile_selection_keyboard(),
-        parse_mode='Markdown'
+    await send_updated_profile(
+        message,
+        user_id,
+        success_message=""
     )
-
-#TODO посмотреть зачем тут два хэндлера на обработку на одно и того же callback
 
 @router.callback_query(F.data == "back_to_params")
 async def process_back_to_params(callback: types.CallbackQuery, state: FSMContext):
@@ -681,9 +747,6 @@ async def process_back_to_params(callback: types.CallbackQuery, state: FSMContex
 
     user_id = callback.from_user.id
 
-    # Вызываем функцию, которая заново загрузит данные, отправит медиа
-    # и отправит обновленную текстовую анкету с клавиатурой get_profile_selection_keyboard().
-    # Мы передаем 'callback', чтобы функция могла удалить/редактировать старое сообщение.
     await send_updated_profile(
         callback,
         user_id,
@@ -711,7 +774,7 @@ async def process_new_name(message: types.Message, state: FSMContext):
     new_name = message.text.strip()
 
     try:
-        await update_user_name(user_id, new_name)  # метод из Registration
+        await update_user_name(user_id, new_name)
     except Exception as e:
         print(f"Ошибка сохранения имени в БД: {e}")
         await message.answer("Произошла ошибка при сохранении имени. Пожалуйста, попробуйте позже.")
@@ -719,12 +782,12 @@ async def process_new_name(message: types.Message, state: FSMContext):
         return
 
     await state.set_state(ProfileStates.select_param_to_fill)
+    await state.clear()
 
-    await message.answer(
-        f"**Имя успешно обновлено!**\n\n"
-        f"Ваше новое имя: **{new_name}**.",
-        reply_markup=get_profile_selection_keyboard(),
-        parse_mode='Markdown'
+    await send_updated_profile(
+        message,
+        user_id,
+        success_message=f"Имя успешно обновлено: **{new_name}**."
     )
 
 @router.callback_query(F.data == "edit_city")
@@ -760,8 +823,13 @@ async def process_new_city(message: types.Message, state: FSMContext):
     await message.answer(
         f"**Город успешно обновлен!**\n\n"
         f"Ваш новый город: **{new_city}**.",
-        reply_markup=get_profile_selection_keyboard(),
         parse_mode='Markdown'
+    )
+
+    await send_updated_profile(
+        message,
+        user_id,
+        success_message=f""
     )
 
 
@@ -801,136 +869,207 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
 
     await state.set_state(ProfileStates.genre)
 
-def make_keyboard_for_instruments(selected):
-    """Клавиатура для инструментов"""
-    instruments = ["Гитара", "Барабаны", "Синтезатор", "Вокал", "Бас", "Скрипка", "Свой вариант"]
-
-    buttons = []
-    for inst in instruments:
-        text = f"✅ {inst}" if inst in selected else inst
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"inst_{inst}")])
-    buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done")])
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
-
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 @router.callback_query(F.data == "edit_instruments")
 async def start_editing_instruments(callback: types.CallbackQuery, state: FSMContext):
     """
-    Запускает процесс выбора инструментов, используя существующие функции make_keyboard_for_instruments.
+    Запускает процесс выбора инструментов, используя НОВУЮ клавиатуру.
     """
     await callback.answer()
 
     user_obj = await get_user(callback.from_user.id)
     current_instruments = user_obj.instruments if user_obj and user_obj.instruments else []
 
-    # Разделение текущих инструментов на стандартные и собственные
+    # Извлекаем только имена инструментов
     all_current_inst_names = [inst.name for inst in current_instruments]
     standard_options = ["Гитара", "Барабаны", "Синтезатор", "Вокал", "Бас", "Скрипка"]
 
+    # Разделение текущих инструментов на стандартные и собственные
     selected_inst = [name for name in all_current_inst_names if name in standard_options]
-    own_inst = [name for name in all_current_inst_names if name not in standard_options]
+    own_inst = [name for name in all_current_inst_names if name not in standard_options]  # <--- Продолжение
 
-    await state.update_data(user_choice_inst=selected_inst)
-    await state.update_data(own_user_inst=own_inst)
+    # Сохраняем в FSM
+    await state.update_data(user_choice_inst=selected_inst, own_user_inst=own_inst)
 
-    msg_text = "**Выберите инструмент/инструменты**, которыми вы владеете (они заменят текущие):"
+    msg_text = "**Выберите инструмент/инструменты**, которыми вы владеете. Нажмите 'Свой вариант' для ввода текста:"
 
-    markup = make_keyboard_for_instruments(selected_inst)
+    markup = get_edit_instruments_keyboard(selected_inst)
 
     await callback.message.edit_text(text=msg_text, reply_markup=markup, parse_mode='Markdown')
-    await state.set_state(ProfileStates.instruments)
+    # ✅ Устанавливаем НОВЫЙ СТЕЙТ
+    await state.set_state(ProfileStates.instrument_edit)
 
 
-@router.callback_query(F.data.startswith("inst_"), ProfileStates.instruments)
-async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка клавиатуры для инструментов"""
-    choose = callback.data.split("_")[1]
+@router.callback_query(F.data.startswith("edit_inst_"), ProfileStates.instrument_edit)
+async def process_instrument_selection_in_edit(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка выбора/отмены выбора стандартного инструмента."""
+    await callback.answer()
+
+    instrument_name = callback.data.split("_", 2)[2]  # Берем часть после edit_inst_
     data = await state.get_data()
-    user_choice = data.get("user_choice_inst", [])
+    selected_inst: list = data.get("user_choice_inst", [])
 
-    if choose == "Свой вариант":
-        await callback.message.edit_text(text="Напишите инструмент:")
-        await state.set_state(ProfileStates.own_instruments)
-        return
-    if choose in user_choice:
-        user_choice.remove(choose)
+    if instrument_name in selected_inst:
+        selected_inst.remove(instrument_name)
     else:
-        user_choice.append(choose)
+        selected_inst.append(instrument_name)
 
-    await callback.message.edit_reply_markup(
-        reply_markup=make_keyboard_for_instruments(user_choice)
+    await state.update_data(user_choice_inst=selected_inst)
+
+    markup = get_edit_instruments_keyboard(selected_inst)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=markup)
+    except Exception:
+        # Игнорируем ошибку, если клавиатура не изменилась
+        pass
+
+
+@router.callback_query(F.data == "input_own_instrument", ProfileStates.instrument_edit)
+async def ask_for_own_instrument(callback: types.CallbackQuery, state: FSMContext):
+    """Переход в режим ожидания текста для ввода собственного инструмента."""
+    await callback.answer()
+    await callback.message.edit_text("**Введите название вашего инструмента текстом:**")
+    # ✅ Остаемся в ProfileStates.instrument_edit, ожидая F.text
+
+
+@router.message(ProfileStates.instrument_edit, F.text)
+async def process_own_instrument_in_edit(message: types.Message, state: FSMContext):
+    """Обработка введенного пользователем собственного инструмента."""
+    new_instrument_name = message.text.strip()
+    data = await state.get_data()
+
+    own_inst: list = data.get("own_user_inst", [])
+    selected_inst: list = data.get("user_choice_inst", [])
+
+    if new_instrument_name in selected_inst or new_instrument_name in own_inst:
+        await message.answer("Этот инструмент уже добавлен. Введите другой или нажмите 'Готово' на клавиатуре.")
+        return
+
+    own_inst.append(new_instrument_name)
+    await state.update_data(own_user_inst=own_inst)
+
+    markup = get_edit_instruments_keyboard(selected_inst)
+
+    await message.answer(
+        f"Инструмент **{new_instrument_name}** добавлен. Продолжайте выбирать или нажмите 'Готово':",
+        reply_markup=markup,
+        parse_mode='Markdown'
     )
-    await state.update_data(user_choice_inst=user_choice)
+
+
+@router.callback_query(F.data.startswith("edit_inst_"), ProfileStates.instrument_edit)
+async def process_instrument_selection_in_edit(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка выбора/отмены выбора стандартного инструмента."""
     await callback.answer()
 
-@router.message(F.text, ProfileStates.own_instruments)
-async def own_instrument(message: types.Message, state: FSMContext):
-    """Обработка кнопки свой вариант для инструментов"""
-    inst = message.text
-
-    if inst.startswith('/'):
-        await message.answer("Нельзя чтобы название инструмента начиналось с /"
-                             "\nНапишите инструмент:")
-        return
-
+    instrument_name = callback.data.split("_", 2)[2]  # Берем часть после edit_inst_
     data = await state.get_data()
-    user_inst = data.get("own_user_inst", [])
-    user_choice = data.get("user_choice_inst", [])
-    user_inst.append(inst)
-    msg_text = (f"Свой вариант:{user_inst}\n"
-                "Выберите инструмент/инструменты, которыми вы владеете:")
-    await message.answer(text=msg_text, reply_markup=make_keyboard_for_instruments(user_choice))
-    await state.set_state(ProfileStates.instruments)
+    selected_inst: list = data.get("user_choice_inst", [])
+
+    if instrument_name in selected_inst:
+        selected_inst.remove(instrument_name)
+    else:
+        selected_inst.append(instrument_name)
+
+    await state.update_data(user_choice_inst=selected_inst)
+
+    markup = get_edit_instruments_keyboard(selected_inst)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=markup)
+    except Exception:
+        # Игнорируем ошибку, если клавиатура не изменилась
+        pass
 
 
-@router.callback_query(F.data.startswith("done"), ProfileStates.instruments)
-async def done(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка кнопки готово для инструментов"""
+@router.callback_query(F.data == "input_own_instrument", ProfileStates.instrument_edit)
+async def ask_for_own_instrument(callback: types.CallbackQuery, state: FSMContext):
+    """Переход в режим ожидания текста для ввода собственного инструмента."""
+    await callback.answer()
+    await callback.message.edit_text("**Введите название вашего инструмента текстом:**")
+    # ✅ Остаемся в ProfileStates.instrument_edit, ожидая F.text
+
+
+@router.message(ProfileStates.instrument_edit, F.text)
+async def process_own_instrument_in_edit(message: types.Message, state: FSMContext):
+    """Обработка введенного пользователем собственного инструмента."""
+    new_instrument_name = message.text.strip()
     data = await state.get_data()
 
-    logger.info("FSM data: %s", data)
+    own_inst: list = data.get("own_user_inst", [])
+    selected_inst: list = data.get("user_choice_inst", [])
 
-    user_choice_inst = data.get("user_choice_inst", [])
-    own_user_inst = data.get("own_user_inst", [])
-    user_id = callback.from_user.id
-
-    if len(user_choice_inst) == 0 and len(own_user_inst) == 0:
-        await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один инструмент")
+    if new_instrument_name in selected_inst or new_instrument_name in own_inst:
+        await message.answer("Этот инструмент уже добавлен. Введите другой или нажмите 'Готово' на клавиатуре.")
         return
 
-    logger.info("user_choice_inst: %s", user_choice_inst)
-    logger.info("own_user_inst: %s", own_user_inst)
-    logger.info("user_id: %s", user_id)
+    own_inst.append(new_instrument_name)
+    await state.update_data(own_user_inst=own_inst)
 
-    all_user_inst = user_choice_inst + own_user_inst
-    instruments_list = [Instrument(name=inst, proficiency_level=0) for inst in all_user_inst]
+    markup = get_edit_instruments_keyboard(selected_inst)
 
-    logger.info("instruments_list для БД: %s", instruments_list)
+    await message.answer(
+        f"Инструмент **{new_instrument_name}** добавлен. Продолжайте выбирать или нажмите 'Готово':",
+        reply_markup=markup,
+        parse_mode='Markdown'
+    )
 
-    try:
-        await update_user_instruments(user_id=user_id, instruments=instruments_list)
-        logger.info("Инструменты успешно обновлены в БД")
-    except Exception as e:
-        logger.error("Ошибка при добавлении инструмента в БД: %s", e)
-        return
 
-    try:
-        await state.set_state(ProfileStates.select_param_to_fill)
-        await send_updated_profile(
-            callback,
-            user_id,
-            success_message="инструменты успешно обновлены!"
+async def _send_level_selection_menu(callback: types.CallbackQuery, state: FSMContext, user_id: int):
+    """
+    Повторно использует логику хендлера 'edit_level'.
+    """
+    user_obj = await get_user(user_id)
+
+    if not user_obj or not user_obj.instruments:
+        # Убедимся, что здесь есть кнопка "Назад"
+        await callback.message.edit_text(
+            "У вас пока нет добавленных инструментов. Сначала добавьте их!",
+            reply_markup=get_profile_selection_keyboard()
         )
+        return
+
+    instrument_keyboard = get_instrument_selection_keyboard(user_obj.instruments)
+
+    # ✅ Ключевой шаг: Устанавливаем целевой стейт для выбора уровня
+    await state.set_state(ProfileStates.select_instrument_to_edit)
+
+    await callback.message.edit_text(
+        "**Инструменты сохранены!**\n\n**Выберите инструмент**, уровень владения которым вы хотите изменить:",
+        reply_markup=instrument_keyboard,
+        parse_mode='Markdown'
+    )
+
+
+@router.callback_query(F.data == "instruments_ready_edit", ProfileStates.instrument_edit)
+async def finalize_instrument_editing(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Обрабатывает кнопку 'Готово' при выборе инструментов, сохраняет их
+    и вызывает логику для выбора уровня владения.
+    """
+    await callback.answer("Сохранение инструментов...")
+    user_id = callback.from_user.id
+    data = await state.get_data()
+
+    selected_inst: list = data.get("user_choice_inst", [])
+    own_inst: list = data.get("own_user_inst", [])
+    all_instruments = selected_inst + own_inst
+
+    # 1. Сохраняем инструменты в БД
+    try:
+        await update_user_instruments(user_id, all_instruments)  # Сама управляет сессией
     except Exception as e:
-        logger.error("Ошибка при обновлении состояния FSM: %s", e)
-    await callback.answer()
+        logger.error(f"Ошибка при обновлении инструментов в БД: {e}")
+        await callback.message.answer("Произошла ошибка при сохранении инструментов. Попробуйте позже.")
+        await state.set_state(ProfileStates.select_param_to_fill)
+        return
 
-
-
-
-
-
+    # 2. ✅ Вызываем логику, которая перенаправит пользователя к выбору уровня владения
+    try:
+        await _send_level_selection_menu(callback, state, user_id)
+    except Exception as e:
+        logger.error(f"Ошибка при переходе к выбору уровня: {e}")
+        await callback.message.answer("Ошибка при переходе к выбору уровня. Профильные данные сохранены.")
+        await state.set_state(ProfileStates.select_param_to_fill)
 
 @router.callback_query(F.data == "edit_link")
 async def start_filling_link(callback: types.CallbackQuery, state: FSMContext):
@@ -1090,4 +1229,47 @@ async def done_genres(callback: types.CallbackQuery, state: FSMContext):
         callback,
         user_id,
         success_message="Жанры успешно обновлены!"
+    )
+
+@router.callback_query(F.data == "edit_about_me")
+async def ask_for_about_me(callback: types.CallbackQuery, state: FSMContext):
+    """Срабатывает при нажатии на 'О себе' и запрашивает текст."""
+    await callback.answer()
+    await state.set_state(ProfileStates.filling_about_me)
+
+    back_button = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_params")]])
+
+    await callback.message.edit_text(
+        "**Введите краткий рассказ о себе**\n\n",
+        parse_mode='Markdown',
+        reply_markup=back_button
+    )
+
+@router.message(ProfileStates.filling_about_me, F.text)
+async def process_new_about_me(message: types.Message, state: FSMContext):
+    """Обрабатывает введенный текст 'О себе', сохраняет его и выводит обновленную анкету."""
+    user_id = message.from_user.id
+    about_me_text = message.text.strip()
+
+    if len(about_me_text) > 1000:
+        await message.answer(
+            "Текст слишком длинный (максимум 1000 символов). Введите более краткое описание."
+        )
+        return
+
+    try:
+        await update_user_about_me(user_id, about_me_text)
+    except Exception as e:
+        print(f"Ошибка сохранения 'О себе' в БД: {e}")
+        await message.answer("Произошла ошибка при сохранении текста. Пожалуйста, попробуйте позже.")
+        await state.set_state(ProfileStates.select_param_to_fill)
+        return
+
+    await state.set_state(ProfileStates.select_param_to_fill)
+
+    await send_updated_profile(
+        message,
+        user_id,
+        success_message="Раздел 'О себе' успешно обновлен!"
     )
