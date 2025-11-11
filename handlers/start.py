@@ -1,12 +1,16 @@
 from aiogram import types, Router
-from aiogram.filters import Command
-from database.queries import check_user
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from database.queries import check_user
+from states.states_registration import RegistrationStates
 
 router = Router()
 
-@router.message(Command('start'))
-async def start(message: types.Message):
+@router.message(CommandStart())
+async def start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     exist = await check_user(user_id)
     #TODO просмотр анкеты и там лайков, сообщений
@@ -20,11 +24,7 @@ async def start(message: types.Message):
         await message.answer(text="Привет, Родной", reply_markup=keyboard)
 
     if not exist:
-
-        #TODO регистрация
-        kb = [
-            [types.KeyboardButton(text="Let's go")],
-        ]
-        keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
-
-        await message.answer(text="Привет, рады тебя приветствовать в нашем боте для поиска музыкантов. Но прежде чем ты приступишь к поиску надо пройти регистрацию", reply_markup=keyboard)
+        keyboard = InlineKeyboardBuilder()
+        keyboard.add(InlineKeyboardButton(text="Let's go", callback_data="start_registration"))
+        await message.answer(text="Привет, рады тебя приветствовать в нашем боте для поиска музыкантов. Но прежде чем ты приступишь к поиску надо пройти регистрацию", reply_markup=keyboard.as_markup())
+        await state.set_state(RegistrationStates.start_registration)

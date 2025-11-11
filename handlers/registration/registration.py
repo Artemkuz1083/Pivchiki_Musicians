@@ -11,19 +11,29 @@ from states.states_registration import RegistrationStates
 
 router = Router()
 
-@router.message(F.text.endswith("Let's go") | F.text.endswith("Создать анкету"))
-async def start_search(message: types.Message, state: FSMContext):
+@router.callback_query(F.data == "start_registration", RegistrationStates.start_registration)
+async def start_search(callback: types.CallbackQuery, state: FSMContext):
 
     await state.set_state(RegistrationStates.name)
-    await message.answer("Начнем с базовых вопросов. "
-                         "После вы можете расширить информацию в профиле "
-                         "Введите ваше имя: ")
+    await callback.message.answer("Начнем с базовых вопросов."
+                         "\nПосле вы можете расширить информацию в профиле "
+                         "\nВведите ваше имя: ")
+    await callback.answer()
 
 @router.message(F.text, RegistrationStates.name)
 async def get_name(message: types.Message, state: FSMContext):
     """Получаем имя от пользователя"""
     name = message.text
     user_id = message.from_user.id
+
+    if name.startswith('/'):
+        await message.answer("Нельзя чтобы имя начиналось с /"
+                                "\nВведите ваше имя")
+        return
+
+    if name == "":
+        await message.answer("Введите ваше имя")
+        return
 
     try:
         await create_user(user_id=user_id)
@@ -58,6 +68,15 @@ async def get_city(message: types.Message, state: FSMContext):
 
     data = await state.get_data()
     user_id = data.get("user_id")
+
+    if city.startswith('/'):
+        await message.answer("Нельзя чтобы город начинался с /"
+                             "\nВведите ваш city")
+        return
+
+    if city == "":
+        await message.answer("Введите ваш город")
+        return
 
     try:
        await update_user_city(user_id, city)
@@ -100,6 +119,12 @@ async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
 async def own_instrument(message: types.Message, state: FSMContext):
     """Обработка кнопки свой вариант для инструментов"""
     inst = message.text
+
+    if inst.startswith('/'):
+        await message.answer("Нельзя чтобы название инструмента начиналось с /"
+                             "\nНапишите инструмент:")
+        return
+
     data = await state.get_data()
     user_inst = data.get("own_user_inst", [])
     user_choice = data.get("user_choice_inst", [])
@@ -131,6 +156,10 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
     own_user_inst = data.get("own_user_inst", [])
     user_id = data.get("user_id")
 
+    if len(user_choice_inst) == 0 and len(own_user_inst) == 0:
+        await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один инструмент")
+        return
+
     logger.info("user_choice_inst: %s", user_choice_inst)
     logger.info("own_user_inst: %s", own_user_inst)
     logger.info("user_id: %s", user_id)
@@ -161,14 +190,16 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
         logger.info("FSM состояние обновлено на level_practice")
     except Exception as e:
         logger.error("Ошибка при обновлении состояния FSM: %s", e)
+    await callback.answer()
+
 
 def keyboard_rating_practice(inst_id: int):
     markup = InlineKeyboardBuilder()
 
     for i in range(1, 6):
-        stars ="⭐️" * i
+        stars =f"{i} ⭐️"
         button = InlineKeyboardButton(
-            text=f"{i} stars",
+            text=stars,
             callback_data=f"practice_{i}_{inst_id}"
         )
         markup.add(button)
@@ -224,8 +255,6 @@ async def update_level_practice(callback: types.CallbackQuery, state: FSMContext
 @router.callback_query(F.data.startswith("select_inst:"), RegistrationStates.level_practice)
 async def view_keyboard_for_rating(callback: types.CallbackQuery, state: FSMContext):
     inst_id = int(callback.data.split(":")[1])
-
-
     await state.update_data(inst_id=inst_id)
     await callback.message.edit_text(
         text="Выберите ваш уровень владения:",
@@ -241,6 +270,7 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(RegistrationStates.genre)
     await state.update_data(user_choice_genre= [])
     await state.update_data(own_user_genre=[])
+    await callback.answer()
 
 
 def make_keyboard_for_genre(selected):
@@ -295,17 +325,20 @@ async def own_genre(message: types.Message, state: FSMContext):
 async def done(callback: types.CallbackQuery, state: FSMContext):
     """Обработка кнопки готово для жанров"""
     data = await state.get_data()
-    user_choice = data.get("user_choice_genre", [])
+    user_choice_genre = data.get("user_choice_genre", [])
     own_user_genre = data.get("own_user_genre", [])
-    all_genres_user = user_choice + own_user_genre
+    all_genres_user = user_choice_genre + own_user_genre
     user_id = data.get("user_id")
+
+    if len(user_choice_genre) == 0 and len(own_user_genre) == 0:
+        await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один жанр ")
+        return
 
     try:
         await update_user_genres(user_id, all_genres_user)
     except Exception as e:
         logger.error(f"Ошибка при добавлении жанров: {e}")
         return
-
 
     msg_text = "Отлично! Теперь вам доступен ваш профиль. Для того что ваше объявление привлекло больше внимания, мы советуем вам дополнить информацию в нем."
     button = [
@@ -314,4 +347,5 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
     ]
     markup = InlineKeyboardMarkup(inline_keyboard=button)
     await callback.message.answer(text=msg_text, reply_markup=markup)
+    await callback.answer()
     await state.clear()

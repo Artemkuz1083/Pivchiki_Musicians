@@ -16,7 +16,6 @@ from database.queries import update_user, update_instrument_level, update_user_e
     update_user_instruments
 from handlers.registration.registration import make_keyboard_for_instruments, logger
 from states.states_profile import ProfileStates
-from states.states_registration import RegistrationStates
 
 router = Router()
 
@@ -221,6 +220,7 @@ def get_theory_level_keyboard_verbal() -> InlineKeyboardMarkup:
         "Продвинутый (4)": 4,
         "Эксперт (5)": 5,
     }
+    return builder.as_markup()
 
 def get_theory_level_keyboard_emoji() -> InlineKeyboardMarkup:
     """
@@ -1144,6 +1144,7 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
     )
 
     await state.set_state(ProfileStates.genre)
+
 
 @router.callback_query(F.data.startswith("genre_"), ProfileStates.genre)
 async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
