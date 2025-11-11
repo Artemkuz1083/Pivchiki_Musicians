@@ -7,11 +7,12 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 
 from database.enums import PerformanceExperience
+from database.models import Instrument
 from database.queries import update_user, update_instrument_level, update_user_experience, update_user_theory_level, \
-    save_user_profile_photo, save_user_audio, get_user, update_user_city, update_user_name, update_user_genres
-from handlers.registration.registration import make_keyboard_for_instruments, logger
+    save_user_profile_photo, save_user_audio, get_user, update_user_city, update_user_name, update_user_genres, \
+    update_user_instruments
+from handlers.registration.registration import logger
 from states.states_profile import ProfileStates
-from states.states_registration import RegistrationStates
 
 router = Router()
 
@@ -194,6 +195,7 @@ def get_theory_level_keyboard_verbal() -> InlineKeyboardMarkup:
         "Продвинутый (4)": 4,
         "Эксперт (5)": 5,
     }
+    return builder.as_markup()
 
 def get_level_rating_keyboard_verbal(instrument_id: int) -> InlineKeyboardMarkup:
     """Создает инлайн-клавиатуру с вербальными градациями для уровня владения инструментом (1-5)."""
@@ -664,6 +666,7 @@ async def process_back_to_params(callback: types.CallbackQuery, state: FSMContex
         parse_mode='Markdown'
     )
 
+#TODO посмотреть зачем тут два хэндлера на обработку на одно и того же callback
 
 @router.callback_query(F.data == "back_to_params")
 async def process_back_to_params(callback: types.CallbackQuery, state: FSMContext):
@@ -798,6 +801,19 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
 
     await state.set_state(ProfileStates.genre)
 
+def make_keyboard_for_instruments(selected):
+    """Клавиатура для инструментов"""
+    instruments = ["Гитара", "Барабаны", "Синтезатор", "Вокал", "Бас", "Скрипка", "Свой вариант"]
+
+    buttons = []
+    for inst in instruments:
+        text = f"✅ {inst}" if inst in selected else inst
+        buttons.append([InlineKeyboardButton(text=text, callback_data=f"inst_{inst}")])
+    buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done")])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 @router.callback_query(F.data == "edit_instruments")
 async def start_editing_instruments(callback: types.CallbackQuery, state: FSMContext):
     """
@@ -823,8 +839,98 @@ async def start_editing_instruments(callback: types.CallbackQuery, state: FSMCon
     markup = make_keyboard_for_instruments(selected_inst)
 
     await callback.message.edit_text(text=msg_text, reply_markup=markup, parse_mode='Markdown')
-    await state.set_state(
-        RegistrationStates.instrument)
+    await state.set_state(ProfileStates.instruments)
+
+
+@router.callback_query(F.data.startswith("inst_"), ProfileStates.instruments)
+async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка клавиатуры для инструментов"""
+    choose = callback.data.split("_")[1]
+    data = await state.get_data()
+    user_choice = data.get("user_choice_inst", [])
+
+    if choose == "Свой вариант":
+        await callback.message.edit_text(text="Напишите инструмент:")
+        await state.set_state(ProfileStates.own_instruments)
+        return
+    if choose in user_choice:
+        user_choice.remove(choose)
+    else:
+        user_choice.append(choose)
+
+    await callback.message.edit_reply_markup(
+        reply_markup=make_keyboard_for_instruments(user_choice)
+    )
+    await state.update_data(user_choice_inst=user_choice)
+    await callback.answer()
+
+@router.message(F.text, ProfileStates.own_instruments)
+async def own_instrument(message: types.Message, state: FSMContext):
+    """Обработка кнопки свой вариант для инструментов"""
+    inst = message.text
+
+    if inst.startswith('/'):
+        await message.answer("Нельзя чтобы название инструмента начиналось с /"
+                             "\nНапишите инструмент:")
+        return
+
+    data = await state.get_data()
+    user_inst = data.get("own_user_inst", [])
+    user_choice = data.get("user_choice_inst", [])
+    user_inst.append(inst)
+    msg_text = (f"Свой вариант:{user_inst}\n"
+                "Выберите инструмент/инструменты, которыми вы владеете:")
+    await message.answer(text=msg_text, reply_markup=make_keyboard_for_instruments(user_choice))
+    await state.set_state(ProfileStates.instruments)
+
+
+@router.callback_query(F.data.startswith("done"), ProfileStates.instruments)
+async def done(callback: types.CallbackQuery, state: FSMContext):
+    """Обработка кнопки готово для инструментов"""
+    data = await state.get_data()
+
+    logger.info("FSM data: %s", data)
+
+    user_choice_inst = data.get("user_choice_inst", [])
+    own_user_inst = data.get("own_user_inst", [])
+    user_id = callback.from_user.id
+
+    if len(user_choice_inst) == 0 and len(own_user_inst) == 0:
+        await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один инструмент")
+        return
+
+    logger.info("user_choice_inst: %s", user_choice_inst)
+    logger.info("own_user_inst: %s", own_user_inst)
+    logger.info("user_id: %s", user_id)
+
+    all_user_inst = user_choice_inst + own_user_inst
+    instruments_list = [Instrument(name=inst, proficiency_level=0) for inst in all_user_inst]
+
+    logger.info("instruments_list для БД: %s", instruments_list)
+
+    try:
+        await update_user_instruments(user_id=user_id, instruments=instruments_list)
+        logger.info("Инструменты успешно обновлены в БД")
+    except Exception as e:
+        logger.error("Ошибка при добавлении инструмента в БД: %s", e)
+        return
+
+    try:
+        await state.set_state(ProfileStates.select_param_to_fill)
+        await send_updated_profile(
+            callback,
+            user_id,
+            success_message="инструменты успешно обновлены!"
+        )
+    except Exception as e:
+        logger.error("Ошибка при обновлении состояния FSM: %s", e)
+    await callback.answer()
+
+
+
+
+
+
 
 @router.callback_query(F.data == "edit_link")
 async def start_filling_link(callback: types.CallbackQuery, state: FSMContext):
@@ -904,6 +1010,7 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
     )
 
     await state.set_state(ProfileStates.genre)
+
 
 @router.callback_query(F.data.startswith("genre_"), ProfileStates.genre)
 async def choose_genre(callback: types.CallbackQuery, state: FSMContext):

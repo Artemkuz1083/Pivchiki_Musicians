@@ -17,3 +17,5 @@ class ProfileStates(StatesGroup):
     filling_city = State()
     genre = State()
     own_genre = State()
+    instruments = State()
+    own_instruments = State()
