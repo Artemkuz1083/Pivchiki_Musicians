@@ -149,7 +149,7 @@ logger = logging.getLogger(__name__)
 
 @router.callback_query(F.data.startswith("done"), RegistrationStates.instrument)
 async def done(callback: types.CallbackQuery, state: FSMContext):
-    from handlers.profile.profile import get_instrument_selection_keyboard
+    from handlers.profile.profile_keyboards import get_instrument_selection_keyboard
     """Обработка кнопки готово для инструментов"""
     msg_text = "Выберите инструмент который вы хотите оценить:"
     data = await state.get_data()
