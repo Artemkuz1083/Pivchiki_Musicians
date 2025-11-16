@@ -17,7 +17,8 @@ async def start(message: types.Message, state: FSMContext):
     if exist:
         kb = [
             [types.KeyboardButton(text="Моя анкета")],
-            [types.KeyboardButton(text="Что-то ещё")],
+            [types.KeyboardButton(text="Зарегистрировать группу")],
+            [types.KeyboardButton(text="Моя группа")]
         ]
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
 
