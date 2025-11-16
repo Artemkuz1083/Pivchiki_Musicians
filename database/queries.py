@@ -1,7 +1,6 @@
 from typing import List
 
 from sqlalchemy import select, update, delete
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from .enums import PerformanceExperience
@@ -12,8 +11,6 @@ async def check_user(user_id: int) -> bool:
     async with AsyncSessionLocal() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         return result.unique().scalar_one_or_none() is not None
-
-
 
 async def get_user(user_id: int) -> User | None:
     async with AsyncSessionLocal() as session:
@@ -39,7 +36,6 @@ async def update_user(user_id: int, **kwargs) -> None:
 
 
 async def update_instrument_level(instrument_id: int, new_level: int) -> None:
-    """Обновляет уровень владения (proficiency_level) для конкретного инструмента по его ID."""
     from .models import Instrument
 
     async with AsyncSessionLocal() as session:
@@ -55,7 +51,6 @@ async def update_instrument_level(instrument_id: int, new_level: int) -> None:
 async def update_user_experience(
         user_id: int,
         experience_type: PerformanceExperience) -> None:
-    """Обновляет опыт выступлений (и его описание)."""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -67,9 +62,6 @@ async def update_user_experience(
 
 
 async def update_user_theory_level(user_id: int, theory_level: int) -> None:
-    """
-    Обновляет поле theoretical_knowledge_level для пользователя по его ID.
-    """
     async with AsyncSessionLocal() as session:
         # Формируем запрос на обновление
         stmt = (
@@ -81,7 +73,6 @@ async def update_user_theory_level(user_id: int, theory_level: int) -> None:
         await session.commit()
 
 async def save_user_audio(user_id: int, file_id: str) -> None:
-    """Обновляет одно аудио/ГС (старое строковое поле)."""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -92,7 +83,6 @@ async def save_user_audio(user_id: int, file_id: str) -> None:
         await session.commit()
 
 async def save_user_link(user_id: int, url: str) -> None:
-    """Обновляет одну внешнюю ссылку (старое строковое поле)."""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -103,7 +93,6 @@ async def save_user_link(user_id: int, url: str) -> None:
         await session.commit()
 
 async def save_user_profile_photo(user_id: int, file_id: str) -> None:
-    """Обновляет одно фото профиля (старое строковое поле)."""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -114,7 +103,6 @@ async def save_user_profile_photo(user_id: int, file_id: str) -> None:
         await session.commit()
 
 async def update_user_name(user_id: int, name: str) -> None:
-    """Обновляет имя пользователя"""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -126,7 +114,6 @@ async def update_user_name(user_id: int, name: str) -> None:
 
 
 async def update_user_city(user_id: int, city: str) -> None:
-    """Обновляет город"""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -137,7 +124,6 @@ async def update_user_city(user_id: int, city: str) -> None:
         await session.commit()
 
 async def update_user_instruments(user_id: int, instruments: List[Instrument]):
-    """Обновляет список инструментов пользователя"""
     async with AsyncSessionLocal() as session:
         # Получаем пользователя
         user = await session.get(User, user_id)
@@ -151,7 +137,6 @@ async def update_user_instruments(user_id: int, instruments: List[Instrument]):
         await session.commit()
 
 async def create_user(user_id: int):
-    """Создает пользователя"""
     async with AsyncSessionLocal() as session:
         existing_user = await session.get(User, user_id)
         if existing_user:
@@ -161,7 +146,6 @@ async def create_user(user_id: int):
         await session.commit()
 
 async def update_user_genres(user_id, genres: List[str]):
-    """Обновляет список жанров"""
     async with AsyncSessionLocal() as session:
         stmt = (
             update(User)
@@ -173,9 +157,6 @@ async def update_user_genres(user_id, genres: List[str]):
 
 
 async def update_user_instruments(user_id: int, instrument_names: list):
-    """
-    Обновляет инструменты, создавая и закрывая сессию внутри себя
-    """
     async with AsyncSessionLocal() as session:
         # 1. Загружаем пользователя, используя сессию
         user_stmt = select(User).where(User.id == user_id).options(selectinload(User.instruments))
@@ -202,7 +183,6 @@ async def update_user_instruments(user_id: int, instrument_names: list):
         await session.commit()
 
 async def update_user_instruments_for_registration(user_id: int, instruments: List[Instrument]):
-    """Обновляет список инструментов пользователя"""
     async with AsyncSessionLocal() as session:
         # Получаем пользователя
         user = await session.get(User, user_id)

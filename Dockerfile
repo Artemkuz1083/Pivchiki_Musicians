@@ -9,4 +9,4 @@ COPY . .
 
 ENV PYTHON=/app
 
-CMD ["python", "main.py"]
+CMD ["python", "-u", "main.py"]

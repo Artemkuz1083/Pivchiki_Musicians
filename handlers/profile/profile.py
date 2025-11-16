@@ -1,16 +1,15 @@
 from aiogram import types, Router, F
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 
 from database.enums import PerformanceExperience
 from database.queries import update_user, update_instrument_level, update_user_experience, update_user_theory_level, \
     save_user_profile_photo, save_user_audio, get_user, update_user_city, update_user_name, update_user_genres, \
     update_user_instruments, update_user_about_me
-from handlers.profile.genres import Genre
-from handlers.profile.instruments import Instruments
+from handlers.enums.genres import Genre
+from handlers.enums.instruments import Instruments
 from handlers.profile.profile_keyboards import get_instrument_selection_keyboard, get_experience_selection_keyboard, \
     get_profile_selection_keyboard, get_edit_instruments_keyboard, get_theory_level_keyboard_verbal, \
     get_theory_level_keyboard_emoji, get_proficiency_star_keyboard, rating_to_stars, make_keyboard_for_genre

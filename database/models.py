@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    BigInteger, Integer, String, ForeignKey, Table, Column, Enum as SQLEnum, ARRAY, Text
+    BigInteger, Integer, String, ForeignKey, Enum as SQLEnum, ARRAY, Text
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List, Optional
@@ -7,14 +7,6 @@ from .enums import PerformanceExperience
 
 class Base(DeclarativeBase):
     pass
-
-
-user_genre = Table(
-    "user_genre",
-    Base.metadata,
-    Column("user_id", BigInteger, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("genre", String, primary_key=True),
-)
 
 class User(Base):
     __tablename__ = "users"

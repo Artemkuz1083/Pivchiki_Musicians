@@ -1,15 +1,13 @@
 from typing import List
-from aiogram import types, Router, F
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.fsm.context import FSMContext
 
 
 from database.enums import PerformanceExperience
-from handlers.profile.genres import Genre
-from handlers.profile.instruments import Instruments
+from handlers.enums.genres import Genre
+from handlers.enums.instruments import Instruments
 
 
 def get_profile_reply_keyboard() -> ReplyKeyboardMarkup:
