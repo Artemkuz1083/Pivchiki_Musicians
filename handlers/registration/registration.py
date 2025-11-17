@@ -147,7 +147,6 @@ async def own_instrument(message: types.Message, state: FSMContext):
 # обработка кнопки готово для инструментов
 @router.callback_query(F.data.startswith("done"), RegistrationStates.instrument)
 async def done_instruments(callback: types.CallbackQuery, state: FSMContext):
-    from handlers.profile.profile_keyboards import get_instrument_selection_keyboard
     msg_text = "Выберите инструмент который вы хотите оценить:"
     data = await state.get_data()
     logger.debug("FSM data при завершении выбора инструментов: %s", data)
@@ -173,7 +172,8 @@ async def done_instruments(callback: types.CallbackQuery, state: FSMContext):
         return
 
     try:
-        markup = get_instrument_selection_keyboard(instruments_list)
+        user_from_db = await get_user(user_id)
+        markup = get_instrument_rating(user_from_db.instruments)
         await callback.message.answer(text=msg_text, reply_markup=markup)
         logger.info("Клавиатура оценки инструментов отправлена пользователю %s", user_id)
     except Exception:

@@ -13,3 +13,16 @@ class PerformanceExperience(str, Enum):
     @classmethod
     def list_values(cls):
         return [member.value for member in cls]
+
+class FinancialStatus(str, Enum):
+    """
+    Варианты финансового статуса группы
+    """
+    POOR = "Мы нищие"
+    READY_TO_INVEST = "ready_to_invest"
+    LIMITED_BUDGET = "limited_budget"
+
+    # возвращаем список финансовых статусов
+    @classmethod
+    def list_values(cls):
+        return [member.value for member in cls]

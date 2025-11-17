@@ -4,12 +4,11 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
 from database.enums import PerformanceExperience
 from handlers.enums.genres import Genre
 from handlers.enums.instruments import Instruments
 
-
+# клавиатура для редактирования профиля
 def get_profile_reply_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
 
@@ -27,9 +26,8 @@ def get_profile_reply_keyboard() -> ReplyKeyboardMarkup:
         one_time_keyboard=False
     )
 
-
+# клавиатура со списком инструментов пользователя
 def get_instrument_selection_keyboard(instruments: list) -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру со списком инструментов пользователя."""
     builder = InlineKeyboardBuilder()
 
     for instrument in instruments:
@@ -42,9 +40,8 @@ def get_instrument_selection_keyboard(instruments: list) -> InlineKeyboardMarkup
     builder.row(InlineKeyboardButton(text="Назад", callback_data="back_to_params"))
     return builder.as_markup()
 
-
+# клавиатура для вариантов опыта выступления
 def get_experience_selection_keyboard() -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру с вариантами опыта выступлений."""
     builder = InlineKeyboardBuilder()
 
     # Итерируемся по Enum
@@ -58,9 +55,8 @@ def get_experience_selection_keyboard() -> InlineKeyboardMarkup:
 
     return builder.as_markup()
 
-
+# клавиатура для выбора параметров профиля
 def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
-    """Создает клавиатуру для выбора параметров профиля."""
     builder = InlineKeyboardBuilder()
 
     builder.add(
@@ -82,9 +78,8 @@ def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
     #builder.row(InlineKeyboardButton(text="Назад", callback_data="back_from_profile"))
     return builder.as_markup()
 
-
+# клавиатура для выбора инструмента
 def get_edit_instruments_keyboard(selected_instruments: list) -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру для выбора инструментов в режиме редактирования."""
     standard_instruments = Instruments.list_values()
 
     builder = InlineKeyboardBuilder()
@@ -100,9 +95,8 @@ def get_edit_instruments_keyboard(selected_instruments: list) -> InlineKeyboardM
 
     return builder.as_markup()
 
-
+# клавиатура уровней теории
 def get_theory_level_keyboard_verbal() -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру с вербальными градациями уровня теории."""
     builder = InlineKeyboardBuilder()
     GRADATIONS = {
         "Совсем не знаю (0)": 0,
@@ -115,10 +109,8 @@ def get_theory_level_keyboard_verbal() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+# клавиатура для оценивания теории
 def get_theory_level_keyboard_emoji() -> InlineKeyboardMarkup:
-    """
-    Создает инлайн-клавиатуру с градациями уровня теории в виде звезд.
-    """
     builder = InlineKeyboardBuilder()
 
     builder.row(
@@ -145,12 +137,8 @@ def get_theory_level_keyboard_emoji() -> InlineKeyboardMarkup:
 
     return builder.as_markup()
 
-
+# клавиатура для уровня владения инструментов
 def get_proficiency_star_keyboard(instrument_id: int) -> InlineKeyboardMarkup:
-    """
-    Создает инлайн-клавиатуру с градациями уровня ВЛАДЕНИЯ (proficiency)
-    в виде звезд (1-5) для конкретного instrument_id.
-    """
     builder = InlineKeyboardBuilder()
 
     # "set_level:{instrument_id}:{new_level}"
@@ -182,39 +170,31 @@ def rating_to_stars(level: int) -> str:
         level = 0
     return "⭐️" * level
 
-
+# клавиатура для оценивания инструментов
 def get_edit_rating_keyboard(instruments: List) -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру со списком инструментов пользователя для оценки уровня."""
     builder = InlineKeyboardBuilder()
 
     for instrument in instruments:
-        # ✅ Уникальный колбэк, использует ID инструмента
         builder.row(InlineKeyboardButton(
             text=f"{instrument.name} (Уровень: {instrument.proficiency_level or '?'})",
             callback_data=f"select_edit_inst:{instrument.id}"
         ))
 
-    # ✅ Уникальный колбэк "Готово" для завершения
     builder.row(InlineKeyboardButton(text="✅ Готово (Профиль)", callback_data="rating_done_edit"))
     return builder.as_markup()
 
-
+# клавиатура для жанров
 def make_keyboard_for_genre(selected: list[str]) -> InlineKeyboardMarkup:
-    """Клавиатура для жанров. Адаптирована для режима редактирования."""
 
-    # 1. Получаем стандартные жанры из Enum
     standard_genres = Genre.list_values()
 
-    # 2. Добавляем опцию для ввода собственного жанра
     all_genre_options = standard_genres + ["Свой вариант"]
 
     buttons = []
 
     for genre in all_genre_options:
-        # Для стандартных жанров проверяем, выбран ли он
         is_selected = genre in selected and genre in standard_genres
 
-        # Специальная обработка текста для "Свой вариант" (если нужно, но в текущей логике не меняется)
         if genre == "Свой вариант":
             text = "Свой вариант 📝"
         else:
@@ -223,7 +203,6 @@ def make_keyboard_for_genre(selected: list[str]) -> InlineKeyboardMarkup:
 
         buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
-    # Кнопки управления
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_genres")])
     buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
 

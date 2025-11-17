@@ -1,9 +1,10 @@
 from sqlalchemy import (
-    BigInteger, Integer, String, ForeignKey, Enum as SQLEnum, ARRAY, Text
+    BigInteger, Integer, String, ForeignKey, Enum as SQLEnum, ARRAY, Text, Date, JSON
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from typing import List, Optional
-from .enums import PerformanceExperience
+from typing import List, Optional, Dict
+from datetime import date
+from .enums import PerformanceExperience, FinancialStatus
 
 class Base(DeclarativeBase):
     pass
@@ -43,3 +44,42 @@ class Instrument(Base):
     proficiency_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="instruments")
+
+class GroupProfile(Base):
+    __tablename__ = "group_profiles"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    city: Mapped[str] = mapped_column(String, nullable=False)
+    genres: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)
+
+    formation_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    platforms: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    financial_status: Mapped[Optional[FinancialStatus]] = mapped_column(
+        SQLEnum(FinancialStatus), nullable=True
+    )
+    concerts: Mapped[Optional[Dict[int, str]]] = mapped_column(JSON, nullable=True)
+
+    members: Mapped[List["GroupMember"]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+        lazy="joined"
+    )
+
+class GroupMember(Base):
+    __tablename__ = "group_members"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("group_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+
+    role: Mapped[str] = mapped_column(String, nullable=False)
+
+    group: Mapped["GroupProfile"] = relationship(back_populates="members")
+    user: Mapped["User"] = relationship()
