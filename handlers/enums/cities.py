@@ -2,8 +2,9 @@ from enum import Enum
 
 class City(str, Enum):
     """
-    Близлежащие города к Челябинску
+    Челябинск и близлежащие к нему города
     """
+    CHELYABINSK = "Челябинск"
     KOPEYSK = "Копейск"
     MIASS = "Миасс"
     CHEBARKUL = "Чебаркуль"
