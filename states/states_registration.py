@@ -5,6 +5,7 @@ class RegistrationStates(StatesGroup):
     name = State()
     age = State()
     city = State()
+    own_city = State()
     instrument = State()
     own_instrument = State()
     level_practice = State()

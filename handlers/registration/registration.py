@@ -5,7 +5,8 @@ from handlers.registration.registration_keyboards import (
     make_keyboard_for_instruments,
     make_keyboard_for_genre,
     keyboard_rating_practice,
-    get_instrument_rating
+    get_instrument_rating,
+    make_keyboard_for_city
 )
 from database.queries import *
 from states.states_registration import RegistrationStates
@@ -53,25 +54,22 @@ async def get_name(message: types.Message, state: FSMContext):
 
     logger.info("Пользователь %s указал имя: %s", user_id, name)
 
-    await message.answer("Введите ваш город:")
+    await message.answer(text="Выберите город:",reply_markup=make_keyboard_for_city())
     await state.set_state(RegistrationStates.city)
 
 # получаем город от пользователя
-@router.message(F.text, RegistrationStates.city)
-async def get_city(message: types.Message, state: FSMContext):
-    city = message.text.lower()
+@router.callback_query(F.data.startswith("city_"), RegistrationStates.city)
+async def get_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split("_")[1]
     await state.update_data(city=city)
 
     data = await state.get_data()
     user_id = data.get("user_id")
 
-    if city.startswith('/'):
-        await message.answer("Нельзя чтобы город начинался с /"
-                             "\nВведите ваш city")
-        return
-
-    if city == "":
-        await message.answer("Введите ваш город")
+    if city.startswith('Свой вариант'):
+        await callback.message.edit_text(text="Напишите город:")
+        await state.set_state(RegistrationStates.own_city)
+        logger.info("Пользователь %s перешёл к вводу собственного города", callback.from_user.id)
         return
 
     try:
@@ -85,12 +83,43 @@ async def get_city(message: types.Message, state: FSMContext):
     msg_text = "Выберите инструмент/инструменты, которыми вы владеете:"
     markup = make_keyboard_for_instruments([])
 
+    await callback.message.answer(text=msg_text, reply_markup=markup)
+    await state.set_state(RegistrationStates.instrument)
+    await state.update_data(user_choice_inst=[])
+    await state.update_data(own_user_inst=[])
+    await callback.answer()
+
+# обработка кнопки "свой вариант для городов"
+@router.message(F.text, RegistrationStates.own_city)
+async def own_city(message: types.Message, state: FSMContext):
+    city = message.text
+
+    if city.startswith('/'):
+        await message.answer("Нельзя чтобы название города начиналось с /"
+                             "\nНапишите город:")
+        return
+
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    try:
+        await update_user_city(user_id, city)
+    except Exception as e:
+        logger.exception("Ошибка при записи города пользователя %s", user_id)
+        return
+
+    logger.info("Пользователь %s ввёл собственный город: %s", message.from_user.id, city)
+
+    msg_text = "Выберите инструмент/инструменты, которыми вы владеете:"
+    markup = make_keyboard_for_instruments([])
+
     await message.answer(text=msg_text, reply_markup=markup)
     await state.set_state(RegistrationStates.instrument)
     await state.update_data(user_choice_inst=[])
     await state.update_data(own_user_inst=[])
 
 # если пользователь вдруг заново нажмет /start при регистрации
+@router.message(F.text.startswith("/"), RegistrationStates.city)
 @router.message(F.text.startswith("/"), RegistrationStates.instrument)
 async def block_commands_during_registration(message: types.Message):
     logger.warning("Пользователь %s пытался использовать команду во время регистрации", message.from_user.id)

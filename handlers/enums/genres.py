@@ -5,11 +5,11 @@ class Genre(str, Enum):
     Стандартные музыкальные жанры, доступные для выбора. FUCKIN GENRES!!1!
     """
     ROCK = "Рок"
+    INDY = "Инди"
+    METAL = "Метал"
     POP_ROCK = "Поп рок"
     GRUNGE = "Гранж"
-    METAL = "Метал"
-    NU_METAL = "Ню метал"
-    PUNK = "Панк"
+    BLUZ = "Блюз"
 
     # возвращаем список жанров
     @classmethod
