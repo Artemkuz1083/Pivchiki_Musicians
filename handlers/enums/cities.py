@@ -11,6 +11,7 @@ class City(str, Enum):
     SATKA = "Сатка"
     ZLATOUST = "Златоуст"
     MAGNITOGORSK = "Магнитогорск"
+    KORKINO = "Коркино"
 
     # возвращаем список городов
     @classmethod
