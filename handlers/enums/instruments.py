@@ -11,7 +11,7 @@ class Instruments(str, Enum):
     BASS = "Бас"
     VIOLIN = "Скрипка"
 
+    # возвращаем список инструментов
     @classmethod
     def list_values(cls):
-        """Возвращает список всех строковых значений инструментов."""
         return [member.value for member in cls]

@@ -1,3 +1,4 @@
+import logging
 import os
 from dotenv import load_dotenv
 from asyncio import run
@@ -6,6 +7,12 @@ from handlers import start
 from handlers.profile import profile
 from handlers.registration import registration
 from database.session import init_db
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logging.info("🔥 ЛОГИ РАБОТАЮТ!")
 
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):

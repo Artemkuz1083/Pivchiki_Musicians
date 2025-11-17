@@ -11,7 +11,7 @@ class Genre(str, Enum):
     NU_METAL = "Ню метал"
     PUNK = "Панк"
 
+    # возвращаем список жанров
     @classmethod
     def list_values(cls):
-        """Возвращает список всех строковых значений жанров."""
         return [member.value for member in cls]

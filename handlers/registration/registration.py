@@ -1,18 +1,24 @@
-from aiogram import F, types, Router, Bot, flags
+from aiogram import F, types, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-import logging
-
-from database.models import *
-
+from aiogram.types import InlineKeyboardMarkup
+from handlers.registration.registration_keyboards import (
+    make_keyboard_for_instruments,
+    make_keyboard_for_genre,
+    keyboard_rating_practice,
+    get_instrument_rating
+)
 from database.queries import *
 from states.states_registration import RegistrationStates
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
+# начало регистрации
 @router.callback_query(F.data == "start_registration", RegistrationStates.start_registration)
 async def start_search(callback: types.CallbackQuery, state: FSMContext):
+    logger.info("Пользователь %s начал регистрацию", callback.from_user.id)
 
     await state.set_state(RegistrationStates.name)
     await callback.message.answer("Начнем с базовых вопросов."
@@ -20,9 +26,9 @@ async def start_search(callback: types.CallbackQuery, state: FSMContext):
                          "\nВведите ваше имя: ")
     await callback.answer()
 
+# получаем имя от пользователя
 @router.message(F.text, RegistrationStates.name)
 async def get_name(message: types.Message, state: FSMContext):
-    """Получаем имя от пользователя"""
     name = message.text
     user_id = message.from_user.id
 
@@ -39,30 +45,20 @@ async def get_name(message: types.Message, state: FSMContext):
         await create_user(user_id=user_id)
         await update_user_name(user_id, name)
     except Exception as e:
-        logger.error(f"Ошибка при записи данных пользователя: {e}")
+        logger.exception("Ошибка при записи имени пользователя %s", user_id)
         return
 
     await state.update_data(user_id=user_id)
     await state.update_data(name=name)
+
+    logger.info("Пользователь %s указал имя: %s", user_id, name)
+
     await message.answer("Введите ваш город:")
     await state.set_state(RegistrationStates.city)
 
-def make_keyboard_for_instruments(selected):
-    """Клавиатура для инструментов"""
-    instruments = ["Гитара", "Барабаны", "Синтезатор", "Вокал", "Бас", "Скрипка", "Свой вариант"]
-
-    buttons = []
-    for inst in instruments:
-        text = f"✅ {inst}" if inst in selected else inst
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"inst_{inst}")])
-    buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done")])
-
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
+# получаем город от пользователя
 @router.message(F.text, RegistrationStates.city)
 async def get_city(message: types.Message, state: FSMContext):
-    """Получаем город"""
     city = message.text.lower()
     await state.update_data(city=city)
 
@@ -81,8 +77,10 @@ async def get_city(message: types.Message, state: FSMContext):
     try:
        await update_user_city(user_id, city)
     except Exception as e:
-        logger.error(f"Ошибка при записи данных пользователя: {e}")
+        logger.exception("Ошибка при записи города пользователя %s", user_id)
         return
+
+    logger.info("Пользователь %s указал город: %s", user_id, city)
 
     msg_text = "Выберите инструмент/инструменты, которыми вы владеете:"
     markup = make_keyboard_for_instruments([])
@@ -92,14 +90,17 @@ async def get_city(message: types.Message, state: FSMContext):
     await state.update_data(user_choice_inst=[])
     await state.update_data(own_user_inst=[])
 
+# если пользователь вдруг заново нажмет /start при регистрации
 @router.message(F.text.startswith("/"), RegistrationStates.instrument)
 async def block_commands_during_registration(message: types.Message):
+    logger.warning("Пользователь %s пытался использовать команду во время регистрации", message.from_user.id)
+
     await message.answer("Закончите регистрацию, чтобы выйти в главное меню")
     return
 
+# обработка клавиатуры для инструментов
 @router.callback_query(F.data.startswith("inst_"), RegistrationStates.instrument)
 async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка клавиатуры для инструментов"""
     choose = callback.data.split("_")[1]
     data = await state.get_data()
     user_choice = data.get("user_choice_inst", [])
@@ -107,6 +108,7 @@ async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
     if choose == "Свой вариант":
         await callback.message.edit_text(text="Напишите инструмент:")
         await state.set_state(RegistrationStates.own_instrument)
+        logger.info("Пользователь %s перешёл к вводу собственного инструмента", callback.from_user.id)
         return
     if choose in user_choice:
         user_choice.remove(choose)
@@ -117,11 +119,12 @@ async def choose_instrument(callback: types.CallbackQuery, state: FSMContext):
         reply_markup=make_keyboard_for_instruments(user_choice)
     )
     await state.update_data(user_choice_inst=user_choice)
+    logger.info("Пользователь %s обновил выбор инструментов: %s", callback.from_user.id, user_choice)
     await callback.answer()
 
+# обработка кнопки "свой вариант для инструментов"
 @router.message(F.text, RegistrationStates.own_instrument)
 async def own_instrument(message: types.Message, state: FSMContext):
-    """Обработка кнопки свой вариант для инструментов"""
     inst = message.text
 
     if inst.startswith('/'):
@@ -135,26 +138,18 @@ async def own_instrument(message: types.Message, state: FSMContext):
     user_inst.append(inst)
     msg_text = (f"Свой вариант:{user_inst}\n"
                 "Выберите инструмент/инструменты, которыми вы владеете:")
+
+    logger.info("Пользователь %s ввёл собственный инструмент: %s", message.from_user.id, inst)
+
     await message.answer(text=msg_text, reply_markup=make_keyboard_for_instruments(user_choice))
     await state.set_state(RegistrationStates.instrument)
 
-
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,  # можно поменять на DEBUG для подробных логов
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-
+# обработка кнопки готово для инструментов
 @router.callback_query(F.data.startswith("done"), RegistrationStates.instrument)
-async def done(callback: types.CallbackQuery, state: FSMContext):
-    from handlers.profile.profile_keyboards import get_instrument_selection_keyboard
-    """Обработка кнопки готово для инструментов"""
+async def done_instruments(callback: types.CallbackQuery, state: FSMContext):
     msg_text = "Выберите инструмент который вы хотите оценить:"
     data = await state.get_data()
-
-    logger.info("FSM data: %s", data)
+    logger.debug("FSM data при завершении выбора инструментов: %s", data)
 
     user_choice_inst = data.get("user_choice_inst", [])
     own_user_inst = data.get("own_user_inst", [])
@@ -164,85 +159,56 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один инструмент")
         return
 
-    logger.info("user_choice_inst: %s", user_choice_inst)
-    logger.info("own_user_inst: %s", own_user_inst)
-    logger.info("user_id: %s", user_id)
-
     all_user_inst = user_choice_inst + own_user_inst
     instruments_list = [Instrument(name=inst, proficiency_level=0) for inst in all_user_inst]
 
-    logger.info("instruments_list для БД: %s", instruments_list)
+    logger.info("Пользователь %s выбрал инструменты: %s", user_id, all_user_inst)
 
     try:
         await update_user_instruments_for_registration(user_id=user_id, instruments=instruments_list)
-        logger.info("Инструменты успешно обновлены в БД")
+        logger.info("Инструменты пользователя %s успешно сохранены в БД", user_id)
     except Exception as e:
-        logger.error("Ошибка при добавлении инструмента в БД: %s", e)
+        logger.exception("Ошибка при сохранении инструментов пользователя %s", user_id)
         return
 
     try:
-        markup = get_instrument_selection_keyboard(instruments_list)
+        user_from_db = await get_user(user_id)
+        markup = get_instrument_rating(user_from_db.instruments)
         await callback.message.answer(text=msg_text, reply_markup=markup)
-        logger.info("Клавиатура инструментов успешно отправлена")
-    except Exception as e:
-        logger.error("Ошибка при создании или отправке клавиатуры: %s", e)
+        logger.info("Клавиатура оценки инструментов отправлена пользователю %s", user_id)
+    except Exception:
+        logger.exception("Ошибка при отправке клавиатуры оценки пользователю %s", user_id)
         return
 
     try:
         await state.set_state(RegistrationStates.level_practice)
         await state.update_data(instruments_list=instruments_list)
-        logger.info("FSM состояние обновлено на level_practice")
-    except Exception as e:
-        logger.error("Ошибка при обновлении состояния FSM: %s", e)
+        logger.info("FSM состояние обновлено на level_practice пользователя%s", user_id)
+    except Exception:
+        logger.exception("Ошибка при обновлении состояния FSM пользователя%s", user_id)
     await callback.answer()
 
-
-def keyboard_rating_practice(inst_id: int):
-    markup = InlineKeyboardBuilder()
-
-    for i in range(1, 6):
-        stars =f"{i} ⭐️"
-        button = InlineKeyboardButton(
-            text=stars,
-            callback_data=f"practice_{i}_{inst_id}"
-        )
-        markup.add(button)
-
-    markup.adjust(5)
-
-    return markup
-
-
-def get_instrument_rating(instruments: list) -> InlineKeyboardMarkup:
-    """Создает инлайн-клавиатуру со списком инструментов пользователя."""
-    builder = InlineKeyboardBuilder()
-
-    for instrument in instruments:
-        builder.row(InlineKeyboardButton(
-            text=f"{instrument.name} (ур. {instrument.proficiency_level})",
-            callback_data=f"select_inst:{instrument.id}"
-        ))
-
-    builder.row(InlineKeyboardButton(text="Готово", callback_data="done"))
-    return builder.as_markup()
-
-
+# обновление уровня практических умений
 @router.callback_query(F.data.startswith("practice_"), RegistrationStates.level_practice)
 async def update_level_practice(callback: types.CallbackQuery, state: FSMContext):
     level = int(callback.data.split("_")[1])
     id_inst = int(callback.data.split("_")[2])
+    user_id = callback.from_user.id
+
     try:
         await update_instrument_level(id_inst, level)
-    except Exception as e:
-        logger.error("Что то пошло не так при обновлении уровня владения в БД")
+        logger.info("Пользователь %s обновил уровень инструмента ID=%s до %s", user_id, id_inst, level)
+    except Exception:
+        logger.exception(
+            "Ошибка обновления уровня: пользователь=%s, инструмент_id=%s, уровень=%s",
+            user_id, id_inst, level
+        )
         return
 
-    data = await state.get_data()
-    user_id = data.get("user_id")
     try:
         user = await get_user(user_id)
-    except Exception as e:
-        logger.error(f"Ошибка при получении данных пользователя: {e}")
+    except Exception:
+        logger.exception("Ошибка загрузки профиля пользователя %s после обновления уровня", user_id)
         return
 
     user_inst = user.instruments
@@ -256,18 +222,31 @@ async def update_level_practice(callback: types.CallbackQuery, state: FSMContext
         reply_markup= get_instrument_rating(user_inst)
     )
 
+# выбор уровня владения инструментом
 @router.callback_query(F.data.startswith("select_inst:"), RegistrationStates.level_practice)
 async def view_keyboard_for_rating(callback: types.CallbackQuery, state: FSMContext):
-    inst_id = int(callback.data.split(":")[1])
-    await state.update_data(inst_id=inst_id)
-    await callback.message.edit_text(
-        text="Выберите ваш уровень владения:",
-        reply_markup=keyboard_rating_practice(inst_id).as_markup()
-    )
+    try:
+        raw_id = callback.data.split(":", 1)[1]
+        logger.info("Получен raw inst_id: %r", raw_id)
+        inst_id = int(raw_id)
+        logger.info("Пользователь %s открыл оценку инструмента с ID=%s", callback.from_user.id, inst_id)
+        await state.update_data(inst_id=inst_id)
+        await callback.message.edit_text(
+            text="Выберите ваш уровень владения:",
+            reply_markup=keyboard_rating_practice(inst_id).as_markup()
+        )
+    except ValueError as e:
+        logger.error("Неверный inst_id: %s", e)
+        await callback.answer("Ошибка: неверный ID инструмента.")
+    except Exception as e:
+        logger.exception("Неизвестная ошибка в view_keyboard_for_rating")
+        await callback.answer("Произошла ошибка. Попробуйте позже.")
 
+# переход к выбору жанров
+@router.callback_query(F.data == "done_rating", RegistrationStates.level_practice)
+async def done_level_practice(callback: types.CallbackQuery, state: FSMContext):
+    logger.info("Пользователь %s завершил выбор уровней инструментов", callback.from_user.id)
 
-@router.callback_query(F.data.startswith("done"), RegistrationStates.level_practice)
-async def done(callback: types.CallbackQuery, state: FSMContext):
     msg_text = "Отлично! Теперь выберите жанры в которых вы играете:"
     markup = make_keyboard_for_genre([])
     await callback.message.answer(text=msg_text, reply_markup=markup)
@@ -276,28 +255,19 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(own_user_genre=[])
     await callback.answer()
 
-
-def make_keyboard_for_genre(selected):
-    """Клавиатура для жанров"""
-    genres = ["Рок", "Поп рок", "Гранж", "Метал", "Ню метал", "Панк", "Свой вариант"]
-
-    buttons = []
-    for genre in genres:
-        text = f"✅ {genre}" if genre in selected else genre
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"genre_{genre}")])
-    buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done")])
-
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
+# обработка клавиатуры для жанров
 @router.callback_query(F.data.startswith("genre_"), RegistrationStates.genre)
 async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка клавиатуры для жанров"""
     choose = callback.data.split("_")[1]
+
+    logger.info("Пользователь %s выбрал/отменил жанр: %s", callback.from_user.id, choose)
+
     data = await state.get_data()
     user_choice = data.get("user_choice_genre", [])
 
     if choose == "Свой вариант":
+        logger.info("Пользователь %s запросил ввод собственного жанра", callback.from_user.id)
+
         await callback.message.edit_text(text="Напишите жанр:")
         await state.set_state(RegistrationStates.own_genre)
         return
@@ -312,22 +282,32 @@ async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(user_choice_genre=user_choice)
     await callback.answer()
 
+# обработка кнопки свой вариант для жанров
 @router.message(F.text, RegistrationStates.own_genre)
 async def own_genre(message: types.Message, state: FSMContext):
-    """Обработка кнопки свой вариант для жанров"""
+    genre_text = message.text.strip()
+    user_id = message.from_user.id
+
+    if genre_text.startswith("/"):
+        await message.answer("Название жанра не может начинаться с /.\nНапишите жанр:")
+        return
+
+    logger.info("Пользователь %s ввёл собственный жанр: %s", user_id, genre_text)
+
     inst = message.text
     data = await state.get_data()
     own_user_genre = data.get("own_user_genre", [])
     user_choice = data.get("user_choice_genre", [])
     own_user_genre.append(inst)
+
     msg_text = (f"Свой вариант:{own_user_genre}\n"
                 "Отлично! Теперь выберите жанры в которых вы играете:")
     await message.answer(text=msg_text, reply_markup=make_keyboard_for_genre(user_choice))
     await state.set_state(RegistrationStates.genre)
 
+# обработка кнопки "готово" для жанров
 @router.callback_query(F.data.startswith("done"), RegistrationStates.genre)
-async def done(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка кнопки готово для жанров"""
+async def done_genre(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     user_choice_genre = data.get("user_choice_genre", [])
     own_user_genre = data.get("own_user_genre", [])
@@ -336,12 +316,16 @@ async def done(callback: types.CallbackQuery, state: FSMContext):
 
     if len(user_choice_genre) == 0 and len(own_user_genre) == 0:
         await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один жанр ")
+        logger.warning("Пользователь %s попытался завершить регистрацию без жанров", user_id)
         return
+
+    logger.info("Пользователь %s выбрал жанры: %s", user_id, all_genres_user)
 
     try:
         await update_user_genres(user_id, all_genres_user)
-    except Exception as e:
-        logger.error(f"Ошибка при добавлении жанров: {e}")
+        logger.info("Жанры пользователя %s успешно сохранены в БД", user_id)
+    except Exception:
+        logger.exception("Ошибка при сохранении жанров пользователя %s", user_id)
         return
 
     msg_text = "Отлично! Теперь вам доступен ваш профиль. Для того что ваше объявление привлекло больше внимания, мы советуем вам дополнить информацию в нем."
