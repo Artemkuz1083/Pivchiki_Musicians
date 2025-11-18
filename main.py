@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from asyncio import run
 from aiogram import Bot, Dispatcher
 from handlers import start
+from handlers.band.band_profile import edit_band_profile
+from handlers.band.band_registration import band_registration
 from handlers.profile import profile
 from handlers.registration import registration
 from database.session import init_db
@@ -28,6 +30,8 @@ async def main():
     await init_db()
     dp.include_router(registration.router)
     dp.include_router(profile.router)
+    dp.include_router(band_registration.router)
+    dp.include_router(edit_band_profile.router)
     dp.include_router(start.router)
     await dp.start_polling(bot)
 

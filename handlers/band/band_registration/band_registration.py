@@ -1,8 +1,11 @@
+import datetime
+
 from aiogram import F, types, Router, Bot, flags
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from database.queries import create_group
 from handlers.band.band_registration.band_registration_states import BandRegistrationStates
 from handlers.band.showing_band_profile_logic import send_band_profile
 from handlers.profile.profile_keyboards import make_keyboard_for_genre
@@ -10,24 +13,42 @@ from handlers.registration.registration import logger
 
 router = Router()
 
-@router.message(F.text == "Зарегистрировать группу")
-async def start_group_registration(message: types.Message, state: FSMContext):
-    """Начало регистрации группы: запрашивает название."""
 
-    await message.answer(
-        "**Начнем регистрацию группы**\n\n"
-        "Напишите название вашей группы",
+async def _start_group_registration_logic(callback_or_message: types.CallbackQuery | types.Message, state: FSMContext):
+    """Общая логика начала регистрации группы."""
+    user_id: int
+    chat_id: int
+
+    if isinstance(callback_or_message, types.CallbackQuery):
+        await callback_or_message.answer()
+        user_id = callback_or_message.from_user.id
+        chat_id = callback_or_message.message.chat.id
+
+    else:
+        user_id = callback_or_message.from_user.id
+        chat_id = callback_or_message.chat.id
+
+    await callback_or_message.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            "**Начнем регистрацию группы**\n\n"
+            "Напишите название вашей группы"
+        ),
         parse_mode='Markdown'
     )
 
-    await state.update_data(user_id=message.from_user.id)
+    await state.update_data(user_id=user_id)
     await state.set_state(BandRegistrationStates.filling_name)
 
+@router.message(F.text == "Зарегистрировать группу")
+async def start_group_registration_from_text(message: types.Message, state: FSMContext):
+    """Ловит текстовое сообщение 'Зарегистрировать группу' от Reply-клавиатуры."""
+    await _start_group_registration_logic(message, state)
 
-import datetime
-
-
-
+@router.callback_query(F.data == "start_band_registration")
+async def start_group_registration_from_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Ловит нажатие ИНЛАЙН-КНОПКИ для начала регистрации группы."""
+    await _start_group_registration_logic(callback, state)
 
 @router.message(F.text, BandRegistrationStates.filling_name)
 async def process_group_name(message: types.Message, state: FSMContext):
@@ -47,7 +68,6 @@ async def process_group_name(message: types.Message, state: FSMContext):
     )
 
     await state.set_state(BandRegistrationStates.filling_foundation_date)
-# ... (остальные импорты)
 
 @router.message(F.text, BandRegistrationStates.filling_foundation_date)
 async def process_foundation_date(message: types.Message, state: FSMContext):
@@ -83,7 +103,6 @@ async def process_foundation_date(message: types.Message, state: FSMContext):
 
     await state.set_state(BandRegistrationStates.selecting_genres)
 
-
 @router.callback_query(F.data.startswith("genre_"), BandRegistrationStates.selecting_genres)
 async def choose_group_genre(callback: types.CallbackQuery, state: FSMContext):
     """Обработка клавиатуры для жанров группы."""
@@ -106,7 +125,6 @@ async def choose_group_genre(callback: types.CallbackQuery, state: FSMContext):
         reply_markup=make_keyboard_for_genre(user_choice)
     )
     await state.update_data(user_choice_genre=user_choice)
-
 
 @router.message(F.text, BandRegistrationStates.filling_own_genre)
 async def own_group_genre(message: types.Message, state: FSMContext):
@@ -137,18 +155,16 @@ async def done_group_registration(callback: types.CallbackQuery, state: FSMConte
     if not all_genres_user:
         await callback.answer("Пожалуйста, выберите жанры.")
         return
-
     #Подготовка данных для сохранения
     group_data = {
         "user_id": data.get("user_id"),
         "name": data.get("group_name"),
-        "foundation_date": data.get("foundation_date"),
+        "foundation_year": data.get("foundation_year"),
         "genres": all_genres_user
     }
 
     #Сохранение в БД
     try:
-        # Вам нужно будет создать эту функцию, которая сохранит group_data в таблицу Group
         await create_group(group_data)
     except Exception as e:
         logger.error(f"Ошибка при регистрации группы: {e}")
@@ -157,13 +173,18 @@ async def done_group_registration(callback: types.CallbackQuery, state: FSMConte
         return
 
     success_msg = f"Поздравляем! Группа {group_data['name']} успешно зарегистрирована!"
-
+    user_id = data.get("user_id")
     await send_band_profile(
         callback,
-        group_data,
+        user_id,
         success_message=success_msg
     )
 
     # Очистка FSM
     await state.clear()
-    await state.clear()
+
+    kb = [
+        [types.KeyboardButton(text="Моя анкета")],
+        [types.KeyboardButton(text="Моя группа")]
+    ]
+    keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
