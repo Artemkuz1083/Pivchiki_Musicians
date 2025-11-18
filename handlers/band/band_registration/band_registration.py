@@ -40,6 +40,17 @@ async def _start_group_registration_logic(callback_or_message: types.CallbackQue
     await state.update_data(user_id=user_id)
     await state.set_state(BandRegistrationStates.filling_name)
 
+# если пользователь вдруг заново нажмет /start при регистрации
+@router.message(F.text.startswith("/"), BandRegistrationStates.filling_name)
+@router.message(F.text.startswith("/"), BandRegistrationStates.filling_foundation_date)
+@router.message(F.text.startswith("/"), BandRegistrationStates.selecting_genres)
+@router.message(F.text.startswith("/"), BandRegistrationStates.filling_own_genre)
+async def block_commands_during_registration(message: types.Message):
+    logger.warning("Пользователь %s пытался использовать команду во время регистрации", message.from_user.id)
+
+    await message.answer("Закончите регистрацию, чтобы выйти в главное меню")
+    return
+
 @router.message(F.text == "Зарегистрировать группу")
 async def start_group_registration_from_text(message: types.Message, state: FSMContext):
     """Ловит текстовое сообщение 'Зарегистрировать группу' от Reply-клавиатуры."""
@@ -146,14 +157,13 @@ async def own_group_genre(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "done_genres", BandRegistrationStates.selecting_genres)
 async def done_group_registration(callback: types.CallbackQuery, state: FSMContext):
     """Обработка кнопки готово для жанров группы и сохранение всех данных."""
-    await callback.answer()
     data = await state.get_data()
 
     #Сборка данных
     all_genres_user = data.get("user_choice_genre", []) + data.get("own_user_genre", [])
 
-    if not all_genres_user:
-        await callback.answer("Пожалуйста, выберите жанры.")
+    if len(all_genres_user) == 0:
+        await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один жанр")
         return
     #Подготовка данных для сохранения
     group_data = {
@@ -188,3 +198,4 @@ async def done_group_registration(callback: types.CallbackQuery, state: FSMConte
         [types.KeyboardButton(text="Моя группа")]
     ]
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+    await callback.answer()

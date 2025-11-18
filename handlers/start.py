@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import logging
 
-from database.queries import check_user, get_band_data_by_user_id
+from database.queries import check_user, get_band_data_by_user_id, check_exist_band
 from states.states_registration import RegistrationStates
 
 logger = logging.getLogger(__name__)
@@ -33,8 +33,7 @@ async def start(message: types.Message, state: FSMContext):
         # 1. Проверяем наличие группы
         band_exists = False
         try:
-            band_data = await get_band_data_by_user_id(user_id)
-            band_exists = bool(band_data)
+            band_exists = await check_exist_band(user_id)
         except Exception:
             logger.exception("Ошибка при проверке группы пользователя %s в БД", user_id)
             # В случае ошибки лучше считать, что группа есть, чтобы не предложить регистрацию повторно
@@ -47,8 +46,8 @@ async def start(message: types.Message, state: FSMContext):
         # 2. Условное добавление кнопки "Зарегистрировать группу"
         if not band_exists:
             kb.append([types.KeyboardButton(text="Зарегистрировать группу")])
-
-        kb.append([types.KeyboardButton(text="Моя группа")])  # Эта кнопка всегда должна быть в конце
+        else:
+            kb.append([types.KeyboardButton(text="Моя группа")])  # Эта кнопка всегда должна быть в конце
 
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
         await message.answer(text="Привет, Родной", reply_markup=keyboard)

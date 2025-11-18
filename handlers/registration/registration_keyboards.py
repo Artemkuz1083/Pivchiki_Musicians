@@ -1,3 +1,4 @@
+from aiogram import types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -9,13 +10,15 @@ from handlers.enums.instruments import Instruments
 def make_keyboard_for_instruments(selected):
     standard_instruments = Instruments.list_values() + ["Свой вариант"]
 
-    buttons = []
+    markup = InlineKeyboardBuilder()
     for inst in standard_instruments:
         text = f"✅ {inst}" if inst in selected else inst
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"inst_{inst}")])
-    buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done")])
+        markup.add(InlineKeyboardButton(text=text, callback_data=f"inst_{inst}"))
+    markup.add(InlineKeyboardButton(text="Готово ✅", callback_data="done"))
 
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    markup.adjust(2, 2, 2, 1, 1)
+
+    return markup.as_markup()
 
 # клавиатура для оценивания практических умений
 def keyboard_rating_practice(inst_id: int):
@@ -50,19 +53,37 @@ def get_instrument_rating(instruments: list) -> InlineKeyboardMarkup:
 def make_keyboard_for_genre(selected):
     genres = Genre.list_values()  + ["Свой вариант"]
 
-    buttons = []
+    markup = InlineKeyboardBuilder()
     for genre in genres:
         text = f"✅ {genre}" if genre in selected else genre
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"genre_{genre}")])
-    buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done")])
+        markup.add(InlineKeyboardButton(text=text, callback_data=f"genre_{genre}"))
+    markup.add(InlineKeyboardButton(text="Готово ✅", callback_data="done"))
 
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    markup.adjust(2, 2, 2, 1, 1)
+
+    return markup.as_markup()
 
 def make_keyboard_for_city():
     cities = City.list_values() + ["Свой вариант"]
 
-    buttons = []
+    markup = InlineKeyboardBuilder()
     for city in cities:
-        buttons.append([InlineKeyboardButton(text=city, callback_data=f"city_{city}")])
+        markup.add(InlineKeyboardButton(text=city, callback_data=f"city_{city}"))
 
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
+    markup.adjust(2, 2, 2, 2, 1)
+
+    return markup.as_markup()
+
+def done_keyboard_for_city():
+    markup = InlineKeyboardBuilder()
+
+    by_text = types.InlineKeyboardButton(
+        text="Верно",
+        callback_data="right")
+    by_audio = types.InlineKeyboardButton(
+        text="Исправить",
+        callback_data="wrong"
+    )
+    markup.add(by_text, by_audio)
+    markup.adjust(2)
+    return markup.as_markup()

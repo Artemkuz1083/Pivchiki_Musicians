@@ -291,6 +291,13 @@ async def update_band_genres(user_id: int, genres_list: List[str]):
         await session.execute(stmt)
         await session.commit()
 
+async def check_exist_band(user_id: int) -> bool:
+    """Проверяет наличие группы"""
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(GroupMember).where(GroupMember.user_id == user_id))
+        return result.unique().scalar_one_or_none() is not None
+
+
 async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
     """
     Получает полный профиль группы по ID пользователя.
