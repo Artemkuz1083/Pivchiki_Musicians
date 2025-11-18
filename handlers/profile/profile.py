@@ -76,6 +76,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     external_link_display = user_obj.external_link if user_obj.external_link else "Не указана"
 
     profile_text = (
+        f"Чтобы перейти в меню напишите /start\n"
         f"Ваша обновленная анкета\n\n"
         f"Имя: {user_obj.name or 'Не указано'}\n"
         f"Возраст: {user_obj.age or 'Не указано'}\n"

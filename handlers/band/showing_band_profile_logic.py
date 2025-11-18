@@ -16,6 +16,7 @@ def format_band_profile(group_data: Dict[str, Any], success_message: Optional[st
     header = f"{success_message}\n\n" if success_message else ""
 
     profile_text = (
+        f"Чтобы перейти в меню напишите /start\n"
         f"{header} **профиль группы** \n"
         f"\n"
         f"**название: {name}** \n"  
