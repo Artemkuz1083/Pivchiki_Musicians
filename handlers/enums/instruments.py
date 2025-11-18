@@ -4,12 +4,12 @@ class Instruments(str, Enum):
     """
     Стандартные музыкальные инструменты.
     """
-    GUITAR = "Гитара"
-    DRUMS = "Барабаны"
-    SYNTHESIZER = "Синтезатор"
-    VOCAL = "Вокал"
     BASS = "Бас"
-    VIOLIN = "Скрипка"
+    RITM_GUITAR = "Ритм гитара"
+    VOCAL = "Вокал"
+    SOLO_GUITAR = "Соло гитара"
+    SYNTHESIZER = "Синтезатор"
+    DRUMS = "Барабаны"
 
     # возвращаем список инструментов
     @classmethod
