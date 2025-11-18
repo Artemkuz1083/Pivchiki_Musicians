@@ -360,7 +360,7 @@ async def done_genre(callback: types.CallbackQuery, state: FSMContext):
     msg_text = "Отлично! Теперь вам доступен ваш профиль. Для того что ваше объявление привлекло больше внимания, мы советуем вам дополнить информацию в нем."
     button = [
         [types.InlineKeyboardButton(text="Моя анкета", callback_data="my_profile")],
-        [types.InlineKeyboardButton(text="Смотреть анкеты", callback_data="search")]
+        [types.InlineKeyboardButton(text="Зарегистрировать группу", callback_data="start_band_registration")]
     ]
     markup = InlineKeyboardMarkup(inline_keyboard=button)
     await callback.message.answer(text=msg_text, reply_markup=markup)

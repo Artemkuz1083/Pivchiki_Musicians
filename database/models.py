@@ -51,10 +51,10 @@ class GroupProfile(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     name: Mapped[str] = mapped_column(String, nullable=False)
-    city: Mapped[str] = mapped_column(String, nullable=False)
+    city: Mapped[str] = mapped_column(String, nullable=True)
     genres: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)
 
-    formation_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    formation_date: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     platforms: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     financial_status: Mapped[Optional[FinancialStatus]] = mapped_column(

@@ -1,10 +1,14 @@
-from typing import List
+import logging
+from datetime import date
+from typing import List, Dict, Optional
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update, delete, insert
+from sqlalchemy.dialects.postgresql import Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from .enums import PerformanceExperience
-from .models import User, Instrument
+from .models import User, Instrument, GroupMember, GroupProfile
 from .session import AsyncSessionLocal
 
 async def check_user(user_id: int) -> bool:
@@ -203,3 +207,118 @@ async def update_user_about_me(user_id: int, about_me_text: str):
             user.about_me = about_me_text
             await session.commit()
 
+async def create_group(group_data: Dict[str, Any]) -> Optional[int]:
+    """Создает новую запись GroupProfile и добавляет пользователя как первого участника."""
+    group_profile_data = {
+        "name": group_data["name"],
+        "genres": group_data["genres"],
+        "formation_date": int(group_data["foundation_year"]),
+    }
+
+    try:
+        async with AsyncSessionLocal() as session:
+            async with session.begin():
+                stmt = insert(GroupProfile).values(**group_profile_data).returning(GroupProfile.id)
+                result = await session.execute(stmt)
+                group_id = result.scalar_one()
+
+                # Добавление пользователя как основателя/участника
+                member_data = {
+                    "group_id": group_id,
+                    "user_id": group_data["user_id"],
+                    "role": "Основатель"
+                }
+                await session.execute(insert(GroupMember).values(**member_data))
+
+            # session.commit() вызывается автоматически после выхода из async with session.begin()
+            return group_id
+    except Exception as e:
+        logging.error(f"Ошибка при создании группы: {e}")
+        return None
+
+
+async def _get_group_id_by_user(user_id: int, session: AsyncSession) -> Optional[int]:
+    """Возвращает ID группы (group_id), связанного с данным пользователем."""
+    stmt = select(GroupMember.group_id).where(GroupMember.user_id == user_id)
+    result = await session.execute(stmt)
+    return result.scalars().first()
+
+async def update_band_year(user_id: int, new_year: str):
+    """Обновляет год основания (formation_date: Integer) группы"""
+
+    new_year_int = int(new_year)
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)  # Передаем сессию
+        if not group_id:
+            return
+
+        stmt = (
+            update(GroupProfile)
+            .where(GroupProfile.id == group_id)
+            .values(formation_date=new_year_int)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def update_band_name(user_id: int, new_name: str):
+    """Обновляет название группы."""
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)
+        if not group_id:
+            return
+
+        stmt = (
+            update(GroupProfile)
+            .where(GroupProfile.id == group_id)
+            .values(name=new_name)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+
+async def update_band_genres(user_id: int, genres_list: List[str]):
+    """Обновляет список жанров группы."""
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)
+        if not group_id:
+            return
+
+        stmt = (
+            update(GroupProfile)
+            .where(GroupProfile.id == group_id)
+            .values(genres=genres_list)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
+    """
+    Получает полный профиль группы по ID пользователя.
+    """
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)
+
+        if not group_id:
+            return {
+                "name": "группа не зарегистрирована",
+                "foundation_year": "Нет",
+                "genres": [],
+                "external_link": "Нет"
+            }
+
+        stmt = select(GroupProfile).where(GroupProfile.id == group_id)
+        result = await session.execute(stmt)
+        band_profile = result.unique().scalar_one_or_none()
+
+    if not band_profile:
+        return {}
+
+    band_data = {
+        "id": band_profile.id,
+        "name": band_profile.name,
+        "genres": band_profile.genres,
+        "foundation_year": str(band_profile.formation_date) if band_profile.formation_date else "Не указан",
+        "external_link": None
+    }
+
+    return band_data

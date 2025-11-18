@@ -5,12 +5,13 @@ from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import logging
 
-from database.queries import check_user
+from database.queries import check_user, get_band_data_by_user_id
 from states.states_registration import RegistrationStates
 
 logger = logging.getLogger(__name__)
 
 router = Router()
+
 
 @router.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
@@ -25,18 +26,37 @@ async def start(message: types.Message, state: FSMContext):
         await message.answer("Произошла ошибка. Попробуйте позже.")
         return
 
-    #TODO просмотр анкеты и там лайков, сообщений
+    # TODO просмотр анкеты и там лайков, сообщений
     if exist:
         logger.info("Пользователь %s уже зарегистрирован", user_id)
+
+        # 1. Проверяем наличие группы
+        band_exists = False
+        try:
+            band_data = await get_band_data_by_user_id(user_id)
+            band_exists = bool(band_data)
+        except Exception:
+            logger.exception("Ошибка при проверке группы пользователя %s в БД", user_id)
+            # В случае ошибки лучше считать, что группа есть, чтобы не предложить регистрацию повторно
+            band_exists = True
+
         kb = [
             [types.KeyboardButton(text="Моя анкета")],
-            [types.KeyboardButton(text="Что-то ещё")],
         ]
+
+        # 2. Условное добавление кнопки "Зарегистрировать группу"
+        if not band_exists:
+            kb.append([types.KeyboardButton(text="Зарегистрировать группу")])
+
+        kb.append([types.KeyboardButton(text="Моя группа")])  # Эта кнопка всегда должна быть в конце
+
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
         await message.answer(text="Привет, Родной", reply_markup=keyboard)
     else:
         logger.info("Пользователь %s — новый, отправляем на регистрацию", user_id)
         keyboard = InlineKeyboardBuilder()
         keyboard.add(InlineKeyboardButton(text="Let's go", callback_data="start_registration"))
-        await message.answer(text="Привет, рады тебя приветствовать в нашем боте для поиска музыкантов. Но прежде чем ты приступишь к поиску надо пройти регистрацию", reply_markup=keyboard.as_markup())
+        await message.answer(
+            text="Привет, рады тебя приветствовать в нашем боте для поиска музыкантов. Но прежде чем ты приступишь к поиску надо пройти регистрацию",
+            reply_markup=keyboard.as_markup())
         await state.set_state(RegistrationStates.start_registration)
