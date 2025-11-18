@@ -204,6 +204,5 @@ def make_keyboard_for_genre(selected: list[str]) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
 
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_genres")])
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
