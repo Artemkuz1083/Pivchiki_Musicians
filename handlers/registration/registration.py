@@ -112,11 +112,11 @@ async def own_city(message: types.Message, state: FSMContext):
     await message.answer(text=msg_text, reply_markup=markup)
     await state.set_state(RegistrationStates.msg_about_city)
 
-
+# подтверждение, что город введен правильно
 @router.callback_query(F.data, RegistrationStates.msg_about_city)
 async def done_for_city(callback: types.CallbackQuery, state: FSMContext):
     if callback.data == "right":
-
+        logger.info("Пользователь подтвердил, что ввел город корректно", )
         msg_text = "Выберите инструмент/инструменты, которыми вы владеете:"
         markup = make_keyboard_for_instruments([])
 
@@ -126,6 +126,7 @@ async def done_for_city(callback: types.CallbackQuery, state: FSMContext):
         await state.update_data(own_user_inst=[])
 
     if callback.data == "wrong":
+        logger.info("Пользователь хочет изменить город")
         await callback.message.answer(text="Выберите город:", reply_markup=make_keyboard_for_city())
         await state.set_state(RegistrationStates.city)
     await callback.answer()

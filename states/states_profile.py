@@ -15,6 +15,7 @@ class ProfileStates(StatesGroup):
     filling_external_link = State()
     filling_name = State()
     filling_city = State()
+    own_city = State()
     genre = State()
     own_genre = State()
     instrument = State()

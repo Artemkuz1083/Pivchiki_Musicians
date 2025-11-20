@@ -63,6 +63,7 @@ def make_keyboard_for_genre(selected):
 
     return markup.as_markup()
 
+# клавиатура для выбора города
 def make_keyboard_for_city():
     cities = City.list_values() + ["Свой вариант"]
 
@@ -74,6 +75,7 @@ def make_keyboard_for_city():
 
     return markup.as_markup()
 
+# клавиатура для подтверждения города
 def done_keyboard_for_city():
     markup = InlineKeyboardBuilder()
 

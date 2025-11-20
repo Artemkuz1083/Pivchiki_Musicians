@@ -13,7 +13,8 @@ from handlers.enums.genres import Genre
 from handlers.enums.instruments import Instruments
 from handlers.profile.profile_keyboards import get_instrument_selection_keyboard, get_experience_selection_keyboard, \
     get_profile_selection_keyboard, get_edit_instruments_keyboard, get_theory_level_keyboard_verbal, \
-    get_theory_level_keyboard_emoji, get_proficiency_star_keyboard, rating_to_stars, make_keyboard_for_genre
+    get_theory_level_keyboard_emoji, get_proficiency_star_keyboard, rating_to_stars, make_keyboard_for_genre, \
+    make_keyboard_for_city
 from handlers.registration.registration import logger
 from states.states_profile import ProfileStates
 
@@ -644,18 +645,46 @@ async def ask_for_city(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await state.set_state(ProfileStates.filling_city)
 
-    back_button = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_params")]])
+    await callback.message.answer(text="Выберите город:",reply_markup=make_keyboard_for_city())
 
-    await callback.message.edit_text(
-        "**Введите ваш новый город:**",
-        parse_mode='Markdown',
-        reply_markup=back_button
+
+# получаем город от пользователя
+@router.callback_query(F.data.startswith("city_"), ProfileStates.filling_city)
+async def process_new_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split("_")[1]
+
+    user_id = callback.from_user.id
+
+    if city.startswith('Свой вариант'):
+        await callback.message.edit_text(text="Напишите город:")
+        await state.set_state(ProfileStates.own_city)
+        logger.info("Пользователь %s перешёл к вводу собственного города", callback.from_user.id)
+        return
+
+    try:
+       await update_user_city(user_id, city)
+    except Exception as e:
+        logger.exception("Ошибка при записи города пользователя %s", user_id)
+        return
+
+    await callback.answer(
+        f"**Город успешно обновлен!**\n\n"
+        f"Ваш новый город: **{city}**.",
+        parse_mode='Markdown'
     )
 
+    await send_updated_profile(
+        callback,
+        user_id,
+        success_message=f""
+    )
 
-@router.message(ProfileStates.filling_city, F.text)
-async def process_new_city(message: types.Message, state: FSMContext):
+    await callback.answer()
+
+
+
+@router.message(ProfileStates.own_city, F.text)
+async def process_new_own_city(message: types.Message, state: FSMContext):
     """
     Обрабатывает введенный город, сохраняет его в БД и показывает обновленный профиль.
     """

@@ -5,6 +5,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.enums import PerformanceExperience
+from handlers.enums.cities import City
 from handlers.enums.genres import Genre
 from handlers.enums.instruments import Instruments
 
@@ -206,3 +207,16 @@ def make_keyboard_for_genre(selected: list[str]) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_genres")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+# клавиатура для выбора города
+def make_keyboard_for_city():
+    cities = City.list_values() + ["Свой вариант"]
+
+    markup = InlineKeyboardBuilder()
+    for city in cities:
+        markup.add(InlineKeyboardButton(text=city, callback_data=f"city_{city}"))
+
+    markup.adjust(2, 2, 2, 2, 1)
+
+    return markup.as_markup()
