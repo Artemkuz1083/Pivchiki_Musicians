@@ -16,3 +16,7 @@ async def init_db():
     async with engine.begin() as conn:
         from .models import Base
         await conn.run_sync(Base.metadata.create_all)
+
+    async with AsyncSessionLocal() as session:
+        from database.test_seed import seed_initial_data
+        await seed_initial_data(session)

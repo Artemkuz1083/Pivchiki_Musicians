@@ -1,9 +1,9 @@
 from sqlalchemy import (
-    BigInteger, Integer, String, ForeignKey, Enum as SQLEnum, ARRAY, Text, Date, JSON
+    BigInteger, Integer, String, ForeignKey, Enum as SQLEnum, ARRAY, Text, Date, JSON, DateTime
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List, Optional, Dict
-from datetime import date
+from datetime import datetime, timezone
 from .enums import PerformanceExperience, FinancialStatus
 
 class Base(DeclarativeBase):
@@ -62,6 +62,11 @@ class GroupProfile(Base):
     )
     concerts: Mapped[Optional[Dict[int, str]]] = mapped_column(JSON, nullable=True)
 
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
     members: Mapped[List["GroupMember"]] = relationship(
         back_populates="group",
         cascade="all, delete-orphan",
