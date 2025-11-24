@@ -40,6 +40,7 @@ async def start(message: types.Message, state: FSMContext):
 
         kb = [
             [types.KeyboardButton(text="Моя анкета")],
+            [types.KeyboardButton(text="Смотреть анкеты")],
         ]
 
         # 2. Условное добавление кнопки "Зарегистрировать группу"
@@ -47,6 +48,7 @@ async def start(message: types.Message, state: FSMContext):
             kb.append([types.KeyboardButton(text="Зарегистрировать группу")])
         else:
             kb.append([types.KeyboardButton(text="Моя группа")])  # Эта кнопка всегда должна быть в конце
+
 
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
         await message.answer(text="Привет, Родной", reply_markup=keyboard)

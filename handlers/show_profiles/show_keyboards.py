@@ -19,10 +19,21 @@ def choose_keyboard_for_show():
     return markup.as_markup()
 
 # клавиатура для управления в режиме просмотра анкет
-def show_reply_keyboard():
+def show_reply_keyboard_for_unregistered_users():
     kb = ReplyKeyboardBuilder()
     kb.button(text="Следующая анкета")
     kb.button(text="Подробнее")
+    kb.button(text="Вернуться на главную")
+
+    kb.adjust(1)
+
+    return kb.as_markup()
+
+# клавиатура для управления в режиме просмотра анкет
+def show_reply_keyboard_for_registered_users():
+    kb = ReplyKeyboardBuilder()
+    kb.button(text="Следующая анкета")
+    kb.button(text="❤️")
     kb.button(text="Вернуться на главную")
 
     kb.adjust(1)

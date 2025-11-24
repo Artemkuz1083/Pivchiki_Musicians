@@ -9,8 +9,7 @@ from handlers.band.band_registration import band_registration
 from handlers.profile import profile
 from handlers.registration import registration
 from database.session import init_db
-from handlers.show_profiles.with_registration import with_registration
-from handlers.show_profiles.without_registration import without_registration
+from handlers.show_profiles import show_profiles
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,8 +34,7 @@ async def main():
     dp.include_router(band_registration.router)
     dp.include_router(edit_band_profile.router)
     dp.include_router(start.router)
-    dp.include_router(without_registration.router)
-    #dp.include_router(with_registration.router)
+    dp.include_router(show_profiles.router)
     await dp.start_polling(bot)
 
 
