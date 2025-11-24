@@ -252,29 +252,36 @@ async def show_my_group_profile(message: types.Message):
     )
 
 def make_keyboard_for_band_genre(selected: list[str]) -> InlineKeyboardMarkup:
+    """
+    Создает клавиатуру жанров с выбором и кнопками 'Готово' и 'Назад'.
+    Жанры расположены в две колонки.
+    """
     standard_genres = Genre.list_values()
 
-    all_genre_options = [g for g in standard_genres]
-    if "Свой вариант" not in all_genre_options:
-        all_genre_options.append("Свой вариант")
-
-    buttons = []
-
-    for genre in all_genre_options:
+    # Формируем список всех опций для кнопок, кроме 'Готово' и 'Назад'
+    genre_options_list = []
+    for genre in standard_genres:
         is_selected = genre in selected and genre in standard_genres
-
-        if genre == "Свой вариант":
-            text = "Свой вариант 📝"
-        else:
-            text = f"✅ {genre}" if is_selected else genre
+        text = f"✅ {genre}" if is_selected else genre
         callback_data = f"genre_{genre}"
+        genre_options_list.append(InlineKeyboardButton(text=text, callback_data=callback_data))
 
-        buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
+    # Добавляем "Свой вариант"
+    text_custom = "Свой вариант 📝"
+    callback_data_custom = "genre_Свой вариант"
+    genre_options_list.append(InlineKeyboardButton(text=text_custom, callback_data=callback_data_custom))
+
+    # Группируем кнопки жанров по две
+    buttons = []
+    for i in range(0, len(genre_options_list), 2):
+        # Добавляем строку из двух или одной кнопки (если осталась последняя)
+        buttons.append(genre_options_list[i:i + 2])
+
+    # Добавляем кнопки "Готово" и "Назад" в отдельные строки (одна колонка)
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_editing_band_genres")])
     buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
 
 def make_keyboard_for_city_editing(selected_city: str | None = None) -> InlineKeyboardMarkup:
     """Клавиатура городов для редактирования с кнопкой 'Назад'."""
@@ -286,10 +293,10 @@ def make_keyboard_for_city_editing(selected_city: str | None = None) -> InlineKe
         text = f"✅ {city}" if city == selected_city else city
         builder.add(InlineKeyboardButton(text=text, callback_data=f"edit_city_{city}"))
 
+    builder.adjust(2)
     builder.row(InlineKeyboardButton(text="Свой вариант", callback_data="edit_city_Свой вариант"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params"))
 
-    builder.adjust(3)
     return builder.as_markup()
 
 

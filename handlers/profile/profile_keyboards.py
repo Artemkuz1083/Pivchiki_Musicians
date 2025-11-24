@@ -186,28 +186,28 @@ def get_edit_rating_keyboard(instruments: List) -> InlineKeyboardMarkup:
 
 # клавиатура для жанров
 def make_keyboard_for_genre(selected: list[str]) -> InlineKeyboardMarkup:
-
+    """
+    Создает клавиатуру жанров с выбором. Жанры расположены в две колонки.
+    """
     standard_genres = Genre.list_values()
-
-    all_genre_options = standard_genres + ["Свой вариант"]
-
     buttons = []
 
-    for genre in all_genre_options:
-        is_selected = genre in selected and genre in standard_genres
-
-        if genre == "Свой вариант":
-            text = "Свой вариант 📝"
-        else:
-            text = f"✅ {genre}" if is_selected else genre
+    genre_options_list = []
+    for genre in standard_genres:
+        is_selected = genre in selected
+        text = f"✅ {genre}" if is_selected else genre
         callback_data = f"genre_{genre}"
+        genre_options_list.append(InlineKeyboardButton(text=text, callback_data=callback_data))
 
-        buttons.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
+    #Группируем стандартные жанры по две
+    for i in range(0, len(genre_options_list), 2):
+        # Добавляем строку из двух или одной кнопки
+        buttons.append(genre_options_list[i:i + 2])
 
+    buttons.append([InlineKeyboardButton(text="Свой вариант 📝", callback_data="genre_Свой вариант")])
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_genres")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
-
 
 # клавиатура для выбора города
 def make_keyboard_for_city():
