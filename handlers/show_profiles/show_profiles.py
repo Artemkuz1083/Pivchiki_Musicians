@@ -43,17 +43,16 @@ async def start_show_unregistered_user(callback: types.CallbackQuery, state: FSM
     await callback.answer()
 
 # старт просмотр анкет, если пользователь зарегистрирован
-@router.message(F.text.startswith("Смотреть анкеты"), ShowProfiles.choose)
-async def start_show_registered_user(callback: types.CallbackQuery, state: FSMContext):
+@router.message(F.text.startswith("Смотреть анкеты"))
+async def start_show_registered_user(message: types.Message, state: FSMContext):
 
     logger.info("Пользователь начал просмотр анкет c регистрацией")
 
     msg = "Выберите, что вы хотите смотреть:"
 
-    await callback.message.answer(text=msg, reply_markup=choose_keyboard_for_show())
+    await message.answer(text=msg, reply_markup=choose_keyboard_for_show())
     await state.update_data(registered=True)
     await state.set_state(ShowProfiles.choose)
-    await callback.answer()
 
 # выбор, что хочет смотреть пользователь
 @router.callback_query(F.data.startswith("chs_"), ShowProfiles.choose)
