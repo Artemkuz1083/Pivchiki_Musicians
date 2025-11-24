@@ -8,10 +8,13 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 
-from database.queries import get_band_data_by_user_id, update_band_year, update_band_name, update_band_genres
+from database.queries import get_band_data_by_user_id, update_band_year, update_band_name, update_band_genres, \
+    update_band_city, update_band_description, update_band_seriousness_level
 from handlers.band.band_profile.band_profile_states import BandEditingStates
 from handlers.band.showing_band_profile_logic import send_band_profile
+from handlers.enums.cities import City
 from handlers.enums.genres import Genre
+from handlers.enums.seriousness_level import SeriousnessLevel
 from handlers.registration.registration import logger
 from states.states_profile import ProfileStates
 
@@ -271,3 +274,197 @@ def make_keyboard_for_band_genre(selected: list[str]) -> InlineKeyboardMarkup:
     buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def make_keyboard_for_city_editing(selected_city: str | None = None) -> InlineKeyboardMarkup:
+    """Клавиатура городов для редактирования с кнопкой 'Назад'."""
+    builder = InlineKeyboardBuilder()
+
+    available_cities = City.list_values()
+
+    for city in available_cities:
+        text = f"✅ {city}" if city == selected_city else city
+        builder.add(InlineKeyboardButton(text=text, callback_data=f"edit_city_{city}"))
+
+    builder.row(InlineKeyboardButton(text="Свой вариант", callback_data="edit_city_Свой вариант"))
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params"))
+
+    builder.adjust(3)
+    return builder.as_markup()
+
+
+@router.callback_query(F.data == "edit_band_city")
+async def start_editing_city(callback: types.CallbackQuery, state: FSMContext):
+    """Начинает редактирование города."""
+    user_id = callback.from_user.id
+    await callback.answer("Редактирование города...")
+
+    # Загружаем текущий город для подсветки
+    band_data = await get_band_data_by_user_id(user_id)
+    current_city = band_data.get("city") if isinstance(band_data.get("city"), str) else None
+
+    await state.update_data(user_id=user_id, city=current_city)
+
+    await callback.message.edit_text(
+        "Выберите новый город для вашей группы:",
+        reply_markup=make_keyboard_for_city_editing(current_city)
+    )
+    await state.set_state(BandEditingStates.editing_city)
+
+
+@router.callback_query(F.data.startswith("edit_city_"), BandEditingStates.editing_city)
+async def process_edited_city(callback: types.CallbackQuery, state: FSMContext):
+    """Обрабатывает выбор города из клавиатуры при редактировании."""
+    await callback.answer()
+    city = callback.data.split("_")[-1]
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    if city == 'Свой вариант':
+        back_markup = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к выбору", callback_data="back_to_city_editing")]])
+
+        await callback.message.edit_text(
+            text="Напишите новый город для вашей группы:",
+            reply_markup=back_markup
+        )
+        await state.set_state(BandEditingStates.inputting_own_city)
+        return
+
+    # Сохраняем и обновляем
+    await update_band_city(user_id, city)
+    await state.clear()
+
+    success_msg = f"✅ Город группы успешно обновлен на: **{city}**"
+    await send_band_profile(callback, user_id, success_message=success_msg)
+
+
+@router.message(F.text, BandEditingStates.inputting_own_city)
+async def process_edited_own_city(message: types.Message, state: FSMContext):
+    """Обрабатывает ввод собственного города при редактировании."""
+    new_city = message.text
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    if new_city.startswith('/'):
+        await message.answer("Название города не может начинаться с '/'. Введите корректное название.")
+        return
+
+    await update_band_city(user_id, new_city)
+    await state.clear()
+
+    success_msg = f"✅ Город группы успешно обновлен на: **{new_city}**"
+    await send_band_profile(message, user_id, success_message=success_msg)
+
+
+# Хендлер для кнопки "Назад к выбору"
+@router.callback_query(F.data == "back_to_city_editing", BandEditingStates.inputting_own_city)
+async def back_to_city_selection_editing(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    current_city = data.get("city")
+
+    await callback.message.edit_text(
+        "Выберите новый город для вашей группы:",
+        reply_markup=make_keyboard_for_city_editing(current_city)
+    )
+    await state.set_state(BandEditingStates.editing_city)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "edit_band_description")
+async def start_editing_description(callback: types.CallbackQuery, state: FSMContext):
+    """Начинает редактирование описания."""
+    user_id = callback.from_user.id
+    await callback.answer()
+
+    await state.update_data(user_id=user_id)
+
+    back_markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")],
+        [InlineKeyboardButton(text="Удалить описание", callback_data="delete_band_description")]
+    ])
+
+    await callback.message.edit_text(
+        "Введите новое описание группы (до 1024 символов) или нажмите 'Удалить описание':",
+        reply_markup=back_markup
+    )
+    await state.set_state(BandEditingStates.editing_description)
+
+
+@router.message(F.text, BandEditingStates.editing_description)
+async def process_edited_description(message: types.Message, state: FSMContext):
+    """Обрабатывает ввод нового описания."""
+    new_description = message.text
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    if len(new_description) > 1024:
+        await message.answer("Описание слишком длинное. Введите короче.")
+        return
+
+    await update_band_description(user_id, new_description)
+    await state.clear()
+
+    success_msg = f"✅ Описание группы успешно обновлено!"
+    await send_band_profile(message, user_id, success_message=success_msg)
+
+
+@router.callback_query(F.data == "delete_band_description", BandEditingStates.editing_description)
+async def delete_band_description(callback: types.CallbackQuery, state: FSMContext):
+    """Удаляет текущее описание группы."""
+    await callback.answer("Описание удалено.")
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    await update_band_description(user_id, None)
+    await state.clear()
+
+    success_msg = "✅ Описание группы успешно удалено!"
+    await send_band_profile(callback, user_id, success_message=success_msg)
+
+
+def make_keyboard_for_level_editing() -> InlineKeyboardMarkup:
+    """Клавиатура уровней для редактирования с кнопкой 'Назад'."""
+    builder = InlineKeyboardBuilder()
+
+    for member in SeriousnessLevel:
+        builder.add(InlineKeyboardButton(text=member.value, callback_data=f"edit_level_{member.name}"))
+
+    builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params"))
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+@router.callback_query(F.data == "edit_band_level")
+async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
+    """Начинает редактирование уровня серьезности."""
+    user_id = callback.from_user.id
+    await callback.answer("Редактирование уровня...")
+
+    await state.update_data(user_id=user_id)
+
+    await callback.message.edit_text(
+        "Выберите новый уровень серьезности вашей группы:",
+        reply_markup=make_keyboard_for_level_editing()
+    )
+    await state.set_state(BandEditingStates.editing_seriousness_level)
+
+
+@router.callback_query(F.data.startswith("edit_level_"), BandEditingStates.editing_seriousness_level)
+async def process_edited_level(callback: types.CallbackQuery, state: FSMContext):
+    """Обрабатывает выбор нового уровня серьезности."""
+    level_key = callback.data.split("_")[-1]
+    data = await state.get_data()
+    user_id = data.get("user_id")
+
+    try:
+        selected_level = SeriousnessLevel[level_key]
+    except KeyError:
+        await callback.answer("Неверный выбор уровня.")
+        return
+
+    await update_band_seriousness_level(user_id, selected_level.value)
+    await state.clear()
+
+    success_msg = f"✅ Уровень серьезности успешно обновлен на: **{selected_level.value}**"
+    await send_band_profile(callback, user_id, success_message=success_msg)

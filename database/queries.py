@@ -207,22 +207,29 @@ async def update_user_about_me(user_id: int, about_me_text: str):
             user.about_me = about_me_text
             await session.commit()
 
+
 async def create_group(group_data: Dict[str, Any]) -> Optional[int]:
-    """Создает новую запись GroupProfile и добавляет пользователя как первого участника."""
+    """
+    Создает новую запись GroupProfile и добавляет пользователя как первого участника.
+    """
     group_profile_data = {
-        "name": group_data["name"],
-        "genres": group_data["genres"],
-        "formation_date": int(group_data["foundation_year"]),
+        "name": group_data.get("name"),
+        "genres": group_data.get("genres", []),
+        "formation_date": int(group_data.get("foundation_year")) if group_data.get("foundation_year") else None,
+        "city": group_data.get("city"),
+        "description": group_data.get("description"),
+        "seriousness_level": group_data.get("seriousness_level"),
     }
 
     try:
         async with AsyncSessionLocal() as session:
             async with session.begin():
+                # Создание профиля группы
                 stmt = insert(GroupProfile).values(**group_profile_data).returning(GroupProfile.id)
                 result = await session.execute(stmt)
                 group_id = result.scalar_one()
 
-                # Добавление пользователя как основателя/участника
+                # Добавление пользователя как основателя
                 member_data = {
                     "group_id": group_id,
                     "user_id": group_data["user_id"],
@@ -230,10 +237,9 @@ async def create_group(group_data: Dict[str, Any]) -> Optional[int]:
                 }
                 await session.execute(insert(GroupMember).values(**member_data))
 
-            # session.commit() вызывается автоматически после выхода из async with session.begin()
             return group_id
     except Exception as e:
-        logging.error(f"Ошибка при создании группы: {e}")
+        logging.error(f"Ошибка при создании группы. Данные: {group_data}. Ошибка: {e}", exc_info=True)
         return None
 
 
@@ -248,7 +254,7 @@ async def update_band_year(user_id: int, new_year: str):
 
     new_year_int = int(new_year)
     async with AsyncSessionLocal() as session:
-        group_id = await _get_group_id_by_user(user_id, session)  # Передаем сессию
+        group_id = await _get_group_id_by_user(user_id, session)
         if not group_id:
             return
 
@@ -307,9 +313,12 @@ async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
 
         if not group_id:
             return {
-                "name": "группа не зарегистрирована",
+                "name": "Группа не зарегистрирована",
                 "foundation_year": "Нет",
                 "genres": [],
+                "city": "Не указан",
+                "description": "Не указано",
+                "seriousness_level": "Не указан",
                 "external_link": "Нет"
             }
 
@@ -320,12 +329,55 @@ async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
     if not band_profile:
         return {}
 
+    level_display = "Не указан"
+    if band_profile.seriousness_level:
+        if hasattr(band_profile.seriousness_level, 'value'):
+            level_display = band_profile.seriousness_level.value
+        else:
+            level_display = str(band_profile.seriousness_level)
+
     band_data = {
         "id": band_profile.id,
         "name": band_profile.name,
         "genres": band_profile.genres,
         "foundation_year": str(band_profile.formation_date) if band_profile.formation_date else "Не указан",
-        "external_link": None
+        "external_link": None,
+        "city": band_profile.city if band_profile.city else "Не указан",
+        "description": band_profile.description if band_profile.description else "Не указано",
+        "seriousness_level": level_display
     }
 
     return band_data
+
+async def update_band_city(user_id: int, new_city: str) -> bool:
+    """Обновляет город группы."""
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)
+        if not group_id: return False
+
+        stmt = update(GroupProfile).where(GroupProfile.id == group_id).values(city=new_city)
+        await session.execute(stmt)
+        await session.commit()
+        return True
+
+async def update_band_description(user_id: int, new_description: str | None) -> bool:
+    """Обновляет описание группы."""
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)
+        if not group_id: return False
+
+        stmt = update(GroupProfile).where(GroupProfile.id == group_id).values(description=new_description)
+        await session.execute(stmt)
+        await session.commit()
+        return True
+
+async def update_band_seriousness_level(user_id: int, new_level: str) -> bool:
+    """Обновляет уровень серьезности группы."""
+    async with AsyncSessionLocal() as session:
+        group_id = await _get_group_id_by_user(user_id, session)
+        if not group_id: return False
+
+        stmt = update(GroupProfile).where(GroupProfile.id == group_id).values(seriousness_level=new_level)
+        await session.execute(stmt)
+        await session.commit()
+        return True
