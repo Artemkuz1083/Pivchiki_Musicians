@@ -2,7 +2,7 @@ import logging
 from datetime import date
 from typing import List, Dict, Optional
 
-from sqlalchemy import select, update, delete, insert
+from sqlalchemy import select, update, delete, insert, func
 from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -329,3 +329,31 @@ async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
     }
 
     return band_data
+
+
+async def get_random_profile(user_id: int) -> User | None:
+    """Получает рандомный профиль, исключая текущего пользователя"""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(User)
+            .where(User.id != user_id)
+            .order_by(func.random())
+            .limit(1)
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalar_one_or_none()
+
+
+async def get_random_group(exclude_group_id: int | None = None) -> GroupProfile | None:
+    """Получает рандомную группу, исключая текущую группу пользователя, если такая есть"""
+    async with AsyncSessionLocal() as session:
+        stmt = select(GroupProfile)
+
+        if exclude_group_id is not None:
+            stmt = stmt.where(GroupProfile.id != exclude_group_id)
+
+        stmt = stmt.order_by(func.random()).limit(1)
+
+        result = await session.execute(stmt)
+        return result.unique().scalar_one_or_none()

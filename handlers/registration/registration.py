@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 # начало регистрации
-@router.callback_query(F.data == "start_registration", RegistrationStates.start_registration)
+@router.callback_query(F.data == "start_registration")
 async def start_search(callback: types.CallbackQuery, state: FSMContext):
     logger.info("Пользователь %s начал регистрацию", callback.from_user.id)
 

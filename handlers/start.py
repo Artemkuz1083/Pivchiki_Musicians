@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 router = Router()
 
-
 @router.message(CommandStart())
 async def start(message: types.Message, state: FSMContext):
+    await state.clear()
     user_id = message.from_user.id
     username = message.from_user.username or "no_username"
     logger.info("Пользователь ID=%s (@%s) вызвал /start", user_id, username)
@@ -26,7 +26,6 @@ async def start(message: types.Message, state: FSMContext):
         await message.answer("Произошла ошибка. Попробуйте позже.")
         return
 
-    # TODO просмотр анкеты и там лайков, сообщений
     if exist:
         logger.info("Пользователь %s уже зарегистрирован", user_id)
 
@@ -54,8 +53,8 @@ async def start(message: types.Message, state: FSMContext):
     else:
         logger.info("Пользователь %s — новый, отправляем на регистрацию", user_id)
         keyboard = InlineKeyboardBuilder()
-        keyboard.add(InlineKeyboardButton(text="Let's go", callback_data="start_registration"))
+        keyboard.add(InlineKeyboardButton(text="Зарегистрироваться", callback_data="start_registration"))
+        keyboard.add(InlineKeyboardButton(text="Смотреть анкеты", callback_data="show_without_registration"))
         await message.answer(
-            text="Привет, рады тебя приветствовать в нашем боте для поиска музыкантов. Но прежде чем ты приступишь к поиску надо пройти регистрацию",
+            text="Привет, рады тебя приветствовать в нашем боте для поиска музыкантов. Ты можешь приступить сразу к просмотру анкет, но без возможности ставить лайки",
             reply_markup=keyboard.as_markup())
-        await state.set_state(RegistrationStates.start_registration)
