@@ -8,6 +8,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from database.queries import create_group
 from handlers.band.band_registration.band_registration_states import BandRegistrationStates
 from handlers.band.showing_band_profile_logic import send_band_profile
+from handlers.enums.cities import City
+from handlers.enums.seriousness_level import SeriousnessLevel
 from handlers.profile.profile_keyboards import make_keyboard_for_genre
 from handlers.registration.registration import logger
 
@@ -154,48 +156,244 @@ async def own_group_genre(message: types.Message, state: FSMContext):
     await message.answer(text=msg_text, reply_markup=make_keyboard_for_genre(user_choice))
     await state.set_state(BandRegistrationStates.selecting_genres)
 
+
 @router.callback_query(F.data == "done_genres", BandRegistrationStates.selecting_genres)
-async def done_group_registration(callback: types.CallbackQuery, state: FSMContext):
-    """Обработка кнопки готово для жанров группы и сохранение всех данных."""
+async def done_group_genres(callback: types.CallbackQuery, state: FSMContext):
+    """Сохраняет жанры и переходит к выбору города."""
     data = await state.get_data()
 
-    #Сборка данных
     all_genres_user = data.get("user_choice_genre", []) + data.get("own_user_genre", [])
 
     if len(all_genres_user) == 0:
         await callback.answer("Чтобы идти дальше обязательно выбрать хотя бы один жанр")
         return
-    #Подготовка данных для сохранения
+
+    await state.update_data(genres=all_genres_user)
+
+    markup = make_keyboard_for_city(None)
+
+    # Редактируем сообщение, чтобы показать клавиатуру городов
+    await callback.message.edit_text(
+        "Спасибо за выбор жанров! Теперь **выберите город**, в котором базируется ваша группа:",
+        reply_markup=markup,
+        parse_mode='Markdown'
+    )
+
+    await state.set_state(BandRegistrationStates.selecting_city)
+
+def make_keyboard_for_city(selected_city: str | None = None) -> InlineKeyboardMarkup:
+    """Создает клавиатуру городов с подсветкой выбранного города."""
+    builder = InlineKeyboardBuilder()
+    available_cities = City.list_values()
+
+    for city in available_cities:
+        # Добавляем галочку, если город выбран
+        text = f"✅ {city}" if city == selected_city else city
+
+        builder.add(InlineKeyboardButton(text=text, callback_data=f"city_{city}"))
+
+    # Добавляем кнопку "Свой вариант" и "Готово"
+    builder.row(InlineKeyboardButton(text="Свой вариант", callback_data="city_Свой вариант"))
+    builder.row(InlineKeyboardButton(text="➡️ Готово", callback_data="done_city"))
+
+    builder.adjust(3)
+    return builder.as_markup()
+
+
+@router.callback_query(F.data.startswith("city_"), BandRegistrationStates.selecting_city)
+async def process_city(callback: types.CallbackQuery, state: FSMContext):
+    city = callback.data.split("_")[1]
+    if city == 'Свой вариант':
+        back_markup = InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="done_genres")]])
+
+        await callback.message.edit_text(
+            text="Напишите город, в котором базируется ваша группа:",
+            reply_markup=back_markup
+        )
+        await state.set_state(BandRegistrationStates.filling_own_city)
+        await callback.answer()
+        return
+
+    await state.update_data(city=city)
+    markup = make_keyboard_for_city(city)
+    await callback.message.edit_reply_markup(reply_markup=markup)
+    await callback.answer(f"✅ Город '{city}' успешно выбран!")
+
+
+@router.message(F.text, BandRegistrationStates.filling_own_city)
+async def process_own_city(message: types.Message, state: FSMContext):
+    city = message.text
+
+    if city.startswith('/'):
+        await message.answer(
+            "Название города не может начинаться с '/'. Пожалуйста, введите корректное название города:")
+        return
+
+    await state.update_data(city=city)
+    logger.info("Пользователь %s ввел собственный город для группы: %s", message.from_user.id, city)
+    markup = make_keyboard_for_city(city)
+
+    await message.answer(
+        f"Город '{city}' сохранен. Нажмите 'Готово (Город)', чтобы завершить регистрацию.",
+        reply_markup=markup
+    )
+
+    await state.set_state(BandRegistrationStates.selecting_city)
+
+
+@router.callback_query(F.data == "done_city", BandRegistrationStates.selecting_city)
+async def done_city_and_start_description(callback: types.CallbackQuery, state: FSMContext):
+    """Проверяет город и переводит к вводу описания 'О себе'."""
+    data = await state.get_data()
+    await callback.answer()
+
+    city = data.get("city")
+    if not city:
+        await callback.answer("Пожалуйста, выберите город или введите 'Свой вариант', чтобы продолжить.")
+        return
+
+    skip_markup = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="➡️ Пропустить", callback_data="skip_description")]]
+    )
+
+    await callback.message.edit_text(
+        "Последний шаг! **Напишите немного о вашей группе** (стиль, достижения, идеи, цели).\n\n"
+        "Максимум 1024 символа.",
+        reply_markup=skip_markup,
+        parse_mode='Markdown'
+    )
+
+    await state.set_state(BandRegistrationStates.filling_description)
+
+
+@router.message(F.text, BandRegistrationStates.filling_description)
+async def process_description_and_continue(message: types.Message, state: FSMContext):
+    """Получает описание 'О себе' и переходит к выбору уровня."""
+    description = message.text
+    if len(description) > 1024:
+        await message.answer("Описание слишком длинное (максимум 1024 символа). Пожалуйста, сократите текст.")
+        return
+    await state.update_data(description=description)
+
+    try:
+        await message.delete()
+    except:
+        pass
+
+    await message.answer(
+        "Спасибо! Теперь **выберите уровень серьезности** вашей группы:",
+        reply_markup=make_keyboard_for_level(),
+        parse_mode='Markdown'
+    )
+    await state.set_state(BandRegistrationStates.selecting_seriousness_level)
+
+
+@router.callback_query(F.data == "skip_description", BandRegistrationStates.filling_description)
+async def skip_description_and_continue(callback: types.CallbackQuery, state: FSMContext):
+    """Пропускает ввод описания и переходит к выбору уровня."""
+    await callback.answer("Описание пропущено.")
+    await state.update_data(description=None)
+
+    await callback.message.edit_text(
+        "Теперь **выберите уровень серьезности** вашей группы:",
+        reply_markup=make_keyboard_for_level(),
+        parse_mode='Markdown'
+    )
+    await state.set_state(BandRegistrationStates.selecting_seriousness_level)
+
+@router.callback_query(F.data == "skip_description", BandRegistrationStates.filling_description)
+async def skip_description_and_finish(callback: types.CallbackQuery, state: FSMContext):
+    """Пропускает ввод описания, сохраняет все данные (с пустым description) в БД и завершает."""
+    user_id = callback.from_user.id
+    await callback.answer("Описание пропущено.")
+
+    # Явно сохраняем description=None
+    await state.update_data(description=None)
+    await callback.message.edit_text(
+        "Теперь **выберите уровень серьезности** вашей группы:",
+        reply_markup=make_keyboard_for_level(),
+        parse_mode='Markdown'
+    )
+
+    await _save_band_and_finish(callback, user_id, state)
+
+def make_keyboard_for_level() -> InlineKeyboardMarkup:
+    """Создает клавиатуру для выбора уровня серьезности."""
+    builder = InlineKeyboardBuilder()
+
+    for level in SeriousnessLevel:
+        builder.add(InlineKeyboardButton(
+            text=level.value,               # Текст на кнопке: "Хобби (для души)"
+            callback_data=f"level_{level.name}" # Данные: "level_HOBBY" (коротко и без ошибок)
+        ))
+
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+@router.callback_query(F.data.startswith("level_"), BandRegistrationStates.selecting_seriousness_level)
+async def process_level_and_finish(callback: types.CallbackQuery, state: FSMContext):
+    """Получает ключ уровня, находит значение в Enum и сохраняет."""
+    level_name = callback.data.split("_", 1)[1]
+
+    try:
+        selected_level = SeriousnessLevel[level_name]
+    except KeyError:
+        await callback.answer("Неверный выбор уровня.")
+        return
+
+    await state.update_data(seriousness_level=selected_level.value)
+    user_id = callback.from_user.id
+
+    await callback.answer(f"✅ Уровень выбран!")
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except:
+        pass
+
+    await _save_band_and_finish(callback, user_id, state)
+
+async def _save_band_and_finish(source: types.Message | types.CallbackQuery, user_id: int, state: FSMContext):
+    """
+    Собирает все данные из FSM, сохраняет их в БД, отправляет профиль и очищает FSM.
+    """
+    data = await state.get_data()
+
+    # Сборка данных для сохранения
     group_data = {
-        "user_id": data.get("user_id"),
+        "user_id": user_id,
         "name": data.get("group_name"),
         "foundation_year": data.get("foundation_year"),
-        "genres": all_genres_user
+        "genres": data.get("genres", []),
+        "city": data.get("city"),
+        "description": data.get("description"),
+        "seriousness_level": data.get("seriousness_level")
     }
 
-    #Сохранение в БД
     try:
         await create_group(group_data)
+        logger.info("Группа успешно зарегистрирована: %s", group_data['name'])
     except Exception as e:
         logger.error(f"Ошибка при регистрации группы: {e}")
-        await callback.message.edit_text("Произошла ошибка при регистрации группы. Попробуйте позже.")
+
+        message_source = source.message if isinstance(source, types.CallbackQuery) else source
+        await message_source.answer("Произошла ошибка при регистрации группы. Попробуйте позже.")
         await state.clear()
         return
 
     success_msg = f"Поздравляем! Группа {group_data['name']} успешно зарегистрирована!"
-    user_id = data.get("user_id")
-    await send_band_profile(
-        callback,
-        user_id,
-        success_message=success_msg
-    )
 
-    # Очистка FSM
+    await send_band_profile(source, user_id, success_message=success_msg)
     await state.clear()
 
+    # Отправляем Reply-клавиатуру
     kb = [
         [types.KeyboardButton(text="Моя анкета")],
         [types.KeyboardButton(text="Моя группа")]
     ]
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-    await callback.answer()
+
+    message_source = source.message if isinstance(source, types.CallbackQuery) else source
+    await message_source.answer("Выберите действие:", reply_markup=keyboard)

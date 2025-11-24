@@ -4,6 +4,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from typing import List, Optional, Dict
 from datetime import datetime, timezone
+
+from handlers.enums.seriousness_level import SeriousnessLevel
 from .enums import PerformanceExperience, FinancialStatus
 
 class Base(DeclarativeBase):
@@ -57,6 +59,11 @@ class GroupProfile(Base):
     formation_date: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     platforms: Mapped[Optional[List[str]]] = mapped_column(ARRAY(String), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    seriousness_level: Mapped[Optional[SeriousnessLevel]] = mapped_column(
+        SQLEnum(SeriousnessLevel, name='seriousness_level'), nullable=True
+    )
+
     financial_status: Mapped[Optional[FinancialStatus]] = mapped_column(
         SQLEnum(FinancialStatus), nullable=True
     )

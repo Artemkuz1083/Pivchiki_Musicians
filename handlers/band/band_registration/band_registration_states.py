@@ -8,3 +8,7 @@ class BandRegistrationStates(StatesGroup):
     filling_foundation_date = State()
     selecting_genres = State()
     filling_own_genre = State()
+    selecting_city = State()
+    filling_own_city = State()
+    filling_description = State()
+    selecting_seriousness_level = State()
