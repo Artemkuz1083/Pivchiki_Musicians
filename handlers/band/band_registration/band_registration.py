@@ -181,6 +181,7 @@ async def done_group_genres(callback: types.CallbackQuery, state: FSMContext):
 
     await state.set_state(BandRegistrationStates.selecting_city)
 
+
 def make_keyboard_for_city(selected_city: str | None = None) -> InlineKeyboardMarkup:
     """Создает клавиатуру городов с подсветкой выбранного города."""
     builder = InlineKeyboardBuilder()
@@ -192,13 +193,11 @@ def make_keyboard_for_city(selected_city: str | None = None) -> InlineKeyboardMa
 
         builder.add(InlineKeyboardButton(text=text, callback_data=f"city_{city}"))
 
-    # Добавляем кнопку "Свой вариант" и "Готово"
+    builder.adjust(2)
     builder.row(InlineKeyboardButton(text="Свой вариант", callback_data="city_Свой вариант"))
     builder.row(InlineKeyboardButton(text="➡️ Готово", callback_data="done_city"))
 
-    builder.adjust(3)
     return builder.as_markup()
-
 
 @router.callback_query(F.data.startswith("city_"), BandRegistrationStates.selecting_city)
 async def process_city(callback: types.CallbackQuery, state: FSMContext):
@@ -391,7 +390,8 @@ async def _save_band_and_finish(source: types.Message | types.CallbackQuery, use
     # Отправляем Reply-клавиатуру
     kb = [
         [types.KeyboardButton(text="Моя анкета")],
-        [types.KeyboardButton(text="Моя группа")]
+        [types.KeyboardButton(text="Моя группа")],
+        [types.KeyboardButton(text="Смотреть анкеты")]
     ]
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
