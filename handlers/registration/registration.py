@@ -23,9 +23,21 @@ async def start_search(callback: types.CallbackQuery, state: FSMContext):
     logger.info("Пользователь %s начал регистрацию", callback.from_user.id)
 
     await state.set_state(RegistrationStates.name)
-    await callback.message.answer("Начнем с базовых вопросов."
-                         "\nПосле вы можете расширить информацию в профиле "
-                         "\nВведите ваше имя: ")
+
+    # Редактируем сообщение, чтобы удалить инлайн-клавиатуру, по которой был клик
+    await callback.message.edit_reply_markup(reply_markup=None)
+
+    # Отправляем новое сообщение с удалением реплай-клавиатуры
+    await callback.message.answer(
+        text=(
+            "Начнем с базовых вопросов."
+            "\nПосле вы можете расширить информацию в профиле "
+            "\nВведите ваше имя: "
+        ),
+        reply_markup=types.ReplyKeyboardRemove()  # <-- УДАЛЕНИЕ РЕПЛАЙ-КЛАВИАТУРЫ
+    )
+
+    # Отвечаем на колбэк (ответ должен быть вызван в конце, чтобы не блокировать обработку)
     await callback.answer()
 
 # получаем имя от пользователя

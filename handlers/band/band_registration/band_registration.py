@@ -36,7 +36,8 @@ async def _start_group_registration_logic(callback_or_message: types.CallbackQue
             "**Начнем регистрацию группы**\n\n"
             "Напишите название вашей группы"
         ),
-        parse_mode='Markdown'
+        parse_mode='Markdown',
+        reply_markup=types.ReplyKeyboardRemove()
     )
 
     await state.update_data(user_id=user_id)

@@ -208,14 +208,14 @@ async def start_filling_profile(callback: types.CallbackQuery, state: FSMContext
     Начинает процесс заполнения профиля, устанавливает состояние выбора параметра.
     """
     await callback.answer()
-
-    # Устанавливаем состояние выбора параметра
+    await callback.message.edit_reply_markup(reply_markup=None)
     await state.set_state(ProfileStates.select_param_to_fill)
 
-    # Отправляем клавиатуру
-    await callback.message.edit_text(
-        "Выберите параметр, который вы хотите установить:",
-        reply_markup=get_profile_selection_keyboard()
+    await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text="Выберите параметр, который вы хотите установить:",
+        reply_markup=get_profile_selection_keyboard(),
+        reply_keyboard=types.ReplyKeyboardRemove()
     )
 
 
@@ -503,24 +503,6 @@ async def handle_uploaded_audio_content(message: types.Message, state: FSMContex
             success_message=f""
         )
 
-
-@router.callback_query(F.data == "edit_link")
-async def start_filling_link(callback: types.CallbackQuery, state: FSMContext):
-    """Срабатывает при нажатии на 'Ссылка' и переводит в режим ожидания URL."""
-    await callback.answer()
-    await state.set_state(ProfileStates.filling_external_link)
-
-    back_button = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_params")]])
-
-    await callback.message.edit_text(
-        "**Пришлите ссылку на ваш плеер** (например, ЯндексМузыка, VK Музыка, YouTube и т.д.).\n\n"
-        "Эта ссылка заменит текущую.",
-        parse_mode='Markdown',
-        reply_markup=back_button
-    )
-
-
 @router.callback_query(F.data == "edit_photo")
 async def start_uploading_photo(callback: types.CallbackQuery, state: FSMContext):
     """Срабатывает при нажатии на 'Фото' и переводит в режим ожидания ОДНОЙ фотографии."""
@@ -535,7 +517,6 @@ async def start_uploading_photo(callback: types.CallbackQuery, state: FSMContext
         parse_mode='Markdown',
         reply_markup=back_button
     )
-
 
 @router.message(ProfileStates.uploading_profile_photo, F.photo)
 async def handle_uploaded_photo(message: types.Message, state: FSMContext):
@@ -568,7 +549,6 @@ async def handle_uploaded_photo(message: types.Message, state: FSMContext):
         success_message=""
     )
 
-
 @router.callback_query(F.data == "back_to_params")
 async def process_back_to_params(callback: types.CallbackQuery, state: FSMContext):
     """
@@ -588,7 +568,6 @@ async def process_back_to_params(callback: types.CallbackQuery, state: FSMContex
         success_message="Вы отменили текущее действие."
     )
 
-
 @router.callback_query(F.data == "edit_name")
 async def ask_for_name(callback: types.CallbackQuery, state: FSMContext):
     """
@@ -605,7 +584,6 @@ async def ask_for_name(callback: types.CallbackQuery, state: FSMContext):
         parse_mode='Markdown',
         reply_markup=back_button
     )
-
 
 @router.message(ProfileStates.filling_name, F.text)
 async def process_new_name(message: types.Message, state: FSMContext):
@@ -636,7 +614,6 @@ async def process_new_name(message: types.Message, state: FSMContext):
         success_message=f""
     )
 
-
 @router.callback_query(F.data == "edit_city")
 async def ask_for_city(callback: types.CallbackQuery, state: FSMContext):
     """
@@ -646,7 +623,6 @@ async def ask_for_city(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(ProfileStates.filling_city)
 
     await callback.message.answer(text="Выберите город:",reply_markup=make_keyboard_for_city())
-
 
 # получаем город от пользователя
 @router.callback_query(F.data.startswith("city_"), ProfileStates.filling_city)
@@ -681,8 +657,6 @@ async def process_new_city(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.answer()
 
-
-
 @router.message(ProfileStates.own_city, F.text)
 async def process_new_own_city(message: types.Message, state: FSMContext):
     """
@@ -713,7 +687,6 @@ async def process_new_own_city(message: types.Message, state: FSMContext):
         success_message=f""
     )
 
-
 @router.callback_query(F.data == "edit_instruments")
 async def start_editing_instruments(callback: types.CallbackQuery, state: FSMContext):
     """
@@ -740,7 +713,6 @@ async def start_editing_instruments(callback: types.CallbackQuery, state: FSMCon
     await callback.message.edit_text(text=msg_text, reply_markup=markup, parse_mode='Markdown')
     await state.set_state(ProfileStates.instrument_edit)
 
-
 @router.callback_query(F.data.startswith("edit_inst_"), ProfileStates.instrument_edit)
 async def process_instrument_selection_in_edit(callback: types.CallbackQuery, state: FSMContext):
     """Обработка выбора/отмены выбора стандартного инструмента."""
@@ -764,14 +736,12 @@ async def process_instrument_selection_in_edit(callback: types.CallbackQuery, st
         # Игнорируем ошибку, если клавиатура не изменилась
         pass
 
-
 @router.callback_query(F.data == "input_own_instrument", ProfileStates.instrument_edit)
 async def ask_for_own_instrument(callback: types.CallbackQuery, state: FSMContext):
     """Переход в режим ожидания текста для ввода собственного инструмента."""
     await callback.answer()
     await callback.message.edit_text("**Введите название вашего инструмента текстом:**")
     # ✅ Остаемся в ProfileStates.instrument_edit, ожидая F.text
-
 
 @router.message(ProfileStates.instrument_edit, F.text)
 async def process_own_instrument_in_edit(message: types.Message, state: FSMContext):
@@ -796,7 +766,6 @@ async def process_own_instrument_in_edit(message: types.Message, state: FSMConte
         reply_markup=markup,
         parse_mode='Markdown'
     )
-
 
 @router.callback_query(F.data.startswith("edit_inst_"), ProfileStates.instrument_edit)
 async def process_instrument_selection_in_edit(callback: types.CallbackQuery, state: FSMContext):
@@ -895,21 +864,6 @@ async def start_filling_link(callback: types.CallbackQuery, state: FSMContext):
         parse_mode='Markdown',
         reply_markup=back_button
     )
-
-
-@router.message(ProfileStates.filling_external_link, F.text)
-async def process_external_link(message: types.Message, state: FSMContext):
-    """
-    Обрабатывает введенную внешнюю ссылку, сохраняет ее в БД и показывает обновленный профиль.
-    """
-    user_id = message.from_user.id
-    new_link = message.text.strip()
-
-    try:
-        await update_user(user_id=user_id, external_link=new_link)
-    except Exception as e:
-        print(f"Ошибка сохранения ссылки в БД: {e}")
-
 
 @router.message(ProfileStates.filling_external_link, F.text)
 async def process_external_link(message: types.Message, state: FSMContext):
