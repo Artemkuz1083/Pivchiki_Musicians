@@ -26,25 +26,37 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     param = callback.data.split("_")[-1]
     user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    # 1. Удаляем инлайн-клавиатуру из сообщения, по которому был клик
+    await callback.message.edit_reply_markup(reply_markup=None)
 
     await state.update_data(user_id=user_id)
 
+    # 2. Создаем инлайн-клавиатуру "Назад"
     back_markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")]
     ])
 
+    # 3. Отправляем НОВОЕ сообщение с удалением реплай-клавиатуры
+
+    text: str
+
     if param == "name":
-        await callback.message.edit_text(
-            "Введите новое название группы:",
-            reply_markup=back_markup
-        )
+        text = "Введите новое название группы:"
         await state.set_state(BandEditingStates.editing_band_name)
     elif param == "year":
-        await callback.message.edit_text(
-            "Введите новый год основания (ГГГГ):",
-            reply_markup=back_markup
-        )
+        text = "Введите новый год основания (ГГГГ):"
         await state.set_state(BandEditingStates.editing_band_year)
+
+    # Отправка нового сообщения, удаляющего ReplyKeyboard
+    await callback.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=back_markup,
+        # УДАЛЕНИЕ РЕПЛАЙ-КЛАВИАТУРЫ
+        reply_keyboard=ReplyKeyboardRemove()
+    )
 
 
 @router.message(F.text, BandEditingStates.editing_band_name)
