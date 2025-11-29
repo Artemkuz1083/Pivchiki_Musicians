@@ -58,7 +58,8 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     experience_display = getattr(user_obj.has_performance_experience, 'value', 'Не указано')
 
     genres_list = user_obj.genres or ["Не указано"]
-    genres_display = ", ".join(genres_list)
+    genre_names = [genre_object.name for genre_object in genres_list]
+    genres_display = ", ".join(genre_names)
 
     instruments_lines = []
     if user_obj.instruments:
@@ -899,14 +900,15 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
     await callback.answer("Запуск редактирования жанров...")
 
     user_obj = await get_user(user_id)
-    current_genres = user_obj.genres if user_obj and user_obj.genres else []
+    current_genre_names = [g.name for g in user_obj.genres] if user_obj and user_obj.genres else []
 
     # Получаем список всех доступных стандартных жанров из Enum
     standard_options = Genre.list_values()
 
     # Разделяем жанры пользователя на стандартные (выбранные из списка) и "собственные" (введенные вручную)
-    selected_genres = [g for g in current_genres if g in standard_options]
-    own_genres = [g for g in current_genres if g not in standard_options]
+    selected_genres = [name for name in current_genre_names if name in standard_options]
+    own_genres = [name for name in current_genre_names if
+                  name not in standard_options]  # Теперь own_genres будет содержать только кастомные жанры
 
     await state.update_data(user_choice_genre=selected_genres)
     await state.update_data(own_user_genre=own_genres)
