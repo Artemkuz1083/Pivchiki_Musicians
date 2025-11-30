@@ -1,16 +1,15 @@
-
 import logging
-from xml.dom.domreg import registered
 
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 
-from database.queries import get_random_profile, get_random_group
+from database.queries import get_random_profile, get_random_group, save_user_interaction, save_group_interaction
 from handlers.show_profiles.show_keyboards import choose_keyboard_for_show, \
     show_reply_keyboard_for_unregistered_users, show_reply_keyboard_for_registered_users
 from handlers.start import start
 from main import bot
 from states.states_show_profiles import ShowProfiles
+from database.enums import Actions
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ async def choose_user(callback: types.CallbackQuery, state: FSMContext):
     choose = callback.data.split("_")[1]
     user_id = callback.from_user.id
 
-    await state.update_data(user_id=user_id)
+    await state.update_data(user_id=user_id, current_target_id=None, current_target_type=None)
 
     if choose == "bands":
         logger.info("Пользователь выбрал просмотр групп")
@@ -81,20 +80,40 @@ async def show_bands(message: types.Message, state: FSMContext):
     registered = data.get("registered")
     markup: types.ReplyKeyboardMarkup
 
+    user_id = data.get("user_id")
+
+    prev_target_id = data.get("current_target_id")
+    prev_target_type = data.get("current_target_type")
+
+    if prev_target_id and prev_target_type == "group":
+        # Если предыдущая цель была группой, записываем SKIP
+        try:
+            await save_group_interaction(user_id, prev_target_id, Actions.SKIP)
+            logger.info(f"Записан автоматический SKIP: user {user_id} -> group {prev_target_id}")
+        except Exception as e:
+            logger.error(f"Ошибка при записи SKIP: {e}")
+
     profile_msg = ""
 
     try:
         logger.info("Пробуем получить данные о группе")
-        band = await get_random_group()
+        band = await get_random_group(user_id)
+        if not band:
+            await message.answer("Анкеты групп закончились! Попробуйте позже.")
+            await state.update_data(current_target_id=None, current_target_type=None)
+            return
     except Exception as e:
         logger.exception("Не получилось получить данные о группе")
 
+    await state.update_data(current_target_id=band.id, current_target_type="group")
+
     name = band.name if band.name is not None else "Не указано"
     year = band.formation_date if band.formation_date is not None else "Не указано"
-    genres = band.genres if band.genres is not None else "Не указано"
+    genres_list = band.genres = band.genres if band.genres is not None else "Не указано"
     city = band.city if band.city is not None else "Не указано"
 
-    genres_display = ", ".join(genres)
+    genre_names = [genre_entity.name for genre_entity in genres_list]
+    genres_display = ", ".join(genre_names)
 
     if not registered:
         markup = show_reply_keyboard_for_unregistered_users()
@@ -119,7 +138,7 @@ async def show_bands(message: types.Message, state: FSMContext):
             f"Год основания: {year}\n"
             f"Город: {city}\n"
             f"Уровень: {level}\n"
-            f"Жанры: {genres}\n"
+            f"Жанры: {genre_names}\n"
             f"\n"
             f"О себе:\n"
             f"_{description}_\n"
@@ -138,17 +157,35 @@ async def show_profiles(message: types.Message, state: FSMContext):
     registered = data.get("registered")
     markup: types.ReplyKeyboardMarkup
 
+    prev_target_id = data.get("current_target_id")
+    prev_target_type = data.get("current_target_type")
+
+    if prev_target_id and prev_target_type == "user":
+        # Если предыдущая цель была пользователем, записываем SKIP
+        try:
+            await save_user_interaction(user_id, prev_target_id, Actions.SKIP)
+            logger.info(f"Записан автоматический SKIP: user {user_id} -> user {prev_target_id}")
+        except Exception as e:
+            logger.error(f"Ошибка при записи SKIP: {e}")
+
     profile_msg = ""
 
     try:
         logger.info("Пробуем получить рандомный профиль пользователя")
         user = await get_random_profile(user_id)
+        if not user:
+            await message.answer("Анкеты пользователей закончились! Попробуйте позже.")
+            await state.update_data(current_target_id=None, current_target_type=None)
+            return
     except Exception as e:
         logger.exception("Ошибка при получении анкеты")
         return
 
+    await state.update_data(current_target_id=user.id, current_target_type="user")
+
     genres_list = user.genres or ["Не указано"]
-    genres_display = ", ".join(genres_list)
+    genre_names = [genre_entity.name for genre_entity in genres_list]
+    genres_display = ", ".join(genre_names)
 
     instruments_lines = []
     if user.instruments:
@@ -256,14 +293,26 @@ async def info(message: types.Message, state: FSMContext):
 @router.message(F.text.startswith("❤️"), ShowProfiles.show_bands)
 @router.message(F.text.startswith("❤️"), ShowProfiles.show_profiles)
 async def like(message: types.Message, state: FSMContext):
-    logger.info("Пользователь нажал кнопку лайк")
     data = await state.get_data()
-    registered = data.get("registered")
-    if not registered:
-        return
-    await message.answer("Вы оценили анкету")
+    user_id = data.get("user_id")
+    target_id = data.get("current_target_id")
+    target_type = data.get("current_target_type")
 
-    #TODO сделать запрос в бд
+    if not user_id or not target_id:
+        return await message.answer("Не удалось определить текущую анкету. Нажмите 'Следующая анкета'.")
+
+    if target_type == "user":
+        await save_user_interaction(user_id, target_id, Actions.LIKE)
+
+        await message.answer("вы оценили данного музыканта")
+        # TODO: Здесь нужна логика отправки уведомлений другому пользователю
+
+
+    elif target_type == "group":
+        await save_group_interaction(user_id, target_id, Actions.LIKE)
+        await message.answer("Вы оценили группу! Они увидят ваш интерес.")
+
+    await state.update_data(current_target_id=None, current_target_type=None)
 
 def rating_to_stars(level: int) -> str:
     if level is None:

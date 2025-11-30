@@ -1,5 +1,5 @@
 import logging
-from datetime import date
+from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
 from sqlalchemy import select, update, delete, insert, func
@@ -7,8 +7,8 @@ from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .enums import PerformanceExperience
-from .models import User, Instrument, GroupMember, GroupProfile
+from .enums import PerformanceExperience, Actions
+from .models import User, Instrument, GroupMember, GroupProfile, UserGenre, GroupGenre, UserLikesUser, UserLikesGroup
 from .session import AsyncSessionLocal
 
 async def check_user(user_id: int) -> bool:
@@ -24,7 +24,7 @@ async def get_user(user_id: int) -> User | None:
             .options(selectinload(User.instruments))
         )
         result = await session.execute(stmt)
-        user = result.scalar_one_or_none()
+        user = result.unique().scalar_one_or_none()
         return user
 
 
@@ -149,14 +149,17 @@ async def create_user(user_id: int):
         session.add(user)
         await session.commit()
 
-async def update_user_genres(user_id, genres: List[str]):
+async def update_user_genres(user_id, genres_names: List[str]):
     async with AsyncSessionLocal() as session:
-        stmt = (
-            update(User)
-            .where(User.id == user_id)
-            .values(genres=genres)
+        await session.execute(
+            delete(UserGenre).where(UserGenre.user_id == user_id)
         )
-        await session.execute(stmt)
+
+        new_genres = [
+            UserGenre(user_id=user_id, name=name) for name in genres_names
+        ]
+
+        session.add_all(new_genres)
         await session.commit()
 
 
@@ -212,9 +215,11 @@ async def create_group(group_data: Dict[str, Any]) -> Optional[int]:
     """
     Создает новую запись GroupProfile и добавляет пользователя как первого участника.
     """
+    genres_to_save: List[str] = group_data.get("genres", [])
+    user_id: int = group_data["user_id"]
+
     group_profile_data = {
         "name": group_data.get("name"),
-        "genres": group_data.get("genres", []),
         "formation_date": int(group_data.get("foundation_year")) if group_data.get("foundation_year") else None,
         "city": group_data.get("city"),
         "description": group_data.get("description"),
@@ -228,6 +233,12 @@ async def create_group(group_data: Dict[str, Any]) -> Optional[int]:
                 stmt = insert(GroupProfile).values(**group_profile_data).returning(GroupProfile.id)
                 result = await session.execute(stmt)
                 group_id = result.scalar_one()
+
+                if genres_to_save:
+                    new_genres = [
+                        GroupGenre(group_id=group_id, name=name) for name in genres_to_save
+                    ]
+                    session.add_all(new_genres)
 
                 # Добавление пользователя как основателя
                 member_data = {
@@ -282,19 +293,22 @@ async def update_band_name(user_id: int, new_name: str):
         await session.commit()
 
 
-async def update_band_genres(user_id: int, genres_list: List[str]):
+async def update_band_genres(user_id: int, genre_names: List[str]):
     """Обновляет список жанров группы."""
     async with AsyncSessionLocal() as session:
         group_id = await _get_group_id_by_user(user_id, session)
         if not group_id:
             return
 
-        stmt = (
-            update(GroupProfile)
-            .where(GroupProfile.id == group_id)
-            .values(genres=genres_list)
+        await session.execute(
+            delete(GroupGenre).where(GroupGenre.group_id == group_id)
         )
-        await session.execute(stmt)
+
+        new_genres = [
+            GroupGenre(group_id=group_id, name=name) for name in genre_names
+        ]
+
+        session.add_all(new_genres)
         await session.commit()
 
 async def check_exist_band(user_id: int) -> bool:
@@ -315,7 +329,6 @@ async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
             return {
                 "name": "Группа не зарегистрирована",
                 "foundation_year": "Нет",
-                "genres": [],
                 "city": "Не указан",
                 "description": "Не указано",
                 "seriousness_level": "Не указан",
@@ -329,6 +342,10 @@ async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
     if not band_profile:
         return {}
 
+    genres_stmt = select(GroupGenre.name).where(GroupGenre.group_id == group_id)
+    genres_result = await session.execute(genres_stmt)
+    band_genres = genres_result.scalars().all()
+
     level_display = "Не указан"
     if band_profile.seriousness_level:
         if hasattr(band_profile.seriousness_level, 'value'):
@@ -339,7 +356,7 @@ async def get_band_data_by_user_id(user_id: int) -> Dict[str, Any]:
     band_data = {
         "id": band_profile.id,
         "name": band_profile.name,
-        "genres": band_profile.genres,
+        "genres": band_genres,
         "foundation_year": str(band_profile.formation_date) if band_profile.formation_date else "Не указан",
         "external_link": None,
         "city": band_profile.city if band_profile.city else "Не указан",
@@ -408,3 +425,28 @@ async def get_random_group(exclude_group_id: int | None = None) -> GroupProfile 
 
         result = await session.execute(stmt)
         return result.unique().scalar_one_or_none()
+
+async def save_user_interaction(swiper_id: int, target_id: int, action: Actions) -> None:
+    """Сохраняет действие пользователя swiper_id на анкету target_id."""
+    async with AsyncSessionLocal() as session:
+        stmt = insert(UserLikesUser).values(
+            swiper_user_id=swiper_id,
+            target_user_id=target_id,
+            action=action.value,  # Сохраняем строковое значение Enum
+            created_at=datetime.now(timezone.utc)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def save_group_interaction(swiper_id: int, target_group_id: int, action: Actions) -> None:
+    """Сохраняет действие пользователя swiper_id на группу target_group_id."""
+    async with AsyncSessionLocal() as session:
+        stmt = insert(UserLikesGroup).values(
+            swiper_user_id=swiper_id,
+            target_group_id=target_group_id,
+            action=action.value,
+            created_at=datetime.now(timezone.utc)
+        )
+        await session.execute(stmt)
+        await session.commit()
+

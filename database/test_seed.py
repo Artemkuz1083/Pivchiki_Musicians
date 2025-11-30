@@ -1,16 +1,17 @@
 import random
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from .models import User, Instrument, GroupProfile, GroupMember
+from .models import User, Instrument, GroupProfile, GroupMember, UserGenre, GroupGenre
 from .enums import PerformanceExperience, FinancialStatus
 from handlers.enums.cities import City
-from handlers.enums.genres import Genre
+from handlers.enums.genres import Genre as GenreEnum
 from handlers.enums.instruments import Instruments
 
 # === Настройка данных ===
 CITIES_ENUM = [c.value for c in City]
-GENRES_ENUM = [g.value for g in Genre]
+GENRES_ENUM = [g.value for g in GenreEnum]
 INSTRUMENTS_ENUM = [i.value for i in Instruments]
 PERF_EXP_VALUES = [e.value for e in PerformanceExperience]
 FIN_STATUSES = [f.value for f in FinancialStatus]
@@ -43,6 +44,7 @@ async def seed_initial_data(session: AsyncSession):
     for _ in range(10):
         # Создаём основателя
         founder_city = random.choice(ALL_CITIES)
+        founder_genre_names = random.sample(ALL_GENRES, k=random.randint(1, 2))
         founder = User(
             id=user_id_counter,
             city=founder_city,
@@ -51,8 +53,9 @@ async def seed_initial_data(session: AsyncSession):
             theoretical_knowledge_level=random.randint(1, 5) if random.random() > 0.3 else None,
             has_performance_experience=random.choice(PERF_EXP_VALUES) if random.random() > 0.3 else None,
             about_me=f"Основатель группы из {founder_city}" if random.random() > 0.4 else None,
-            genres=random.sample(ALL_GENRES, k=random.randint(1, 2))
         )
+        for genre_name in founder_genre_names:
+            founder.genres.append(UserGenre(name=genre_name))
         session.add(founder)
 
         # Инструменты для основателя
@@ -65,17 +68,18 @@ async def seed_initial_data(session: AsyncSession):
             session.add(instr)
 
         group_city = random.choice(ALL_CITIES)
-        group_genres = random.sample(ALL_GENRES, k=random.randint(1, 3))
+        group_genre_names = random.sample(ALL_GENRES, k=random.randint(1, 3))
         group = GroupProfile(
             id=group_id_counter,
             name=f"Group_{group_id_counter}",
             city=group_city,
-            genres=group_genres,
             formation_date=random.randint(2015, 2025) if random.random() > 0.3 else None,
             financial_status=random.choice(FIN_STATUSES) if random.random() > 0.4 else None,
             description=f"Группа из {group_city}" if random.random() > 0.5 else None,
             platforms=["VK", "YouTube"] if random.random() > 0.6 else ["Instagram"]
         )
+        for genre_name in group_genre_names:
+            group.genres.append(GroupGenre(name=genre_name))
         session.add(group)
 
         members = [founder]
@@ -84,7 +88,8 @@ async def seed_initial_data(session: AsyncSession):
         # Создаём дополнительных участников
         for i in range(num_extra):
             member_id = user_id_counter + i + 1
-            member_city = group_city  # или random.choice(ALL_CITIES), если хотите разнообразия
+            member_city = group_city
+            member_genre_names = random.sample(group_genre_names, k=1)
             member = User(
                 id=member_id,
                 city=member_city,
@@ -93,8 +98,9 @@ async def seed_initial_data(session: AsyncSession):
                 theoretical_knowledge_level=random.randint(1, 5) if random.random() > 0.3 else None,
                 has_performance_experience=random.choice(PERF_EXP_VALUES) if random.random() > 0.3 else None,
                 about_me=f"Участник группы из {member_city}" if random.random() > 0.4 else None,
-                genres=group_genres[:1]  # или random.sample(group_genres, k=1)
             )
+            for genre_name in member_genre_names:
+                member.genres.append(UserGenre(name=genre_name))
             session.add(member)
 
             # 🔥 ОБЯЗАТЕЛЬНО: добавляем инструмент каждому участнику

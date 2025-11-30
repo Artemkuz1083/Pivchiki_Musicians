@@ -19,10 +19,17 @@ class FinancialStatus(str, Enum):
     Варианты финансового статуса группы
     """
     POOR = "Мы нищие"
-    READY_TO_INVEST = "ready_to_invest"
-    LIMITED_BUDGET = "limited_budget"
+    READY_TO_INVEST = "Готовы инвестировать"
+    LIMITED_BUDGET = "Ограниченный бюджет"
 
     # возвращаем список финансовых статусов
     @classmethod
     def list_values(cls):
         return [member.value for member in cls]
+
+class Actions(str, Enum):
+    """
+    Список действий с анкетами
+    """
+    SKIP = "Skip"
+    LIKE = "Like"
