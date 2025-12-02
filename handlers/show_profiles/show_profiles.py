@@ -3,7 +3,8 @@ import logging
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 
-from database.queries import get_random_profile, get_random_group, save_user_interaction, save_group_interaction
+from database.queries import get_random_profile, get_random_group, save_user_interaction, save_group_interaction, \
+    get_profile_which_not_action, get_band_which_not_action
 from handlers.show_profiles.show_keyboards import choose_keyboard_for_show, \
     show_reply_keyboard_for_unregistered_users, show_reply_keyboard_for_registered_users
 from handlers.start import start
@@ -85,7 +86,7 @@ async def show_bands(message: types.Message, state: FSMContext):
     prev_target_id = data.get("current_target_id")
     prev_target_type = data.get("current_target_type")
 
-    if prev_target_id and prev_target_type == "group":
+    if prev_target_id and prev_target_type == "group" and registered:
         # Если предыдущая цель была группой, записываем SKIP
         try:
             await save_group_interaction(user_id, prev_target_id, Actions.SKIP)
@@ -97,7 +98,7 @@ async def show_bands(message: types.Message, state: FSMContext):
 
     try:
         logger.info("Пробуем получить данные о группе")
-        band = await get_random_group(user_id)
+        band = await get_random_group() if not registered else await get_band_which_not_action(user_id)
         if not band:
             await message.answer("Анкеты групп закончились! Попробуйте позже.")
             await state.update_data(current_target_id=None, current_target_type=None)
@@ -160,7 +161,7 @@ async def show_profiles(message: types.Message, state: FSMContext):
     prev_target_id = data.get("current_target_id")
     prev_target_type = data.get("current_target_type")
 
-    if prev_target_id and prev_target_type == "user":
+    if prev_target_id and prev_target_type == "user" and registered:
         # Если предыдущая цель была пользователем, записываем SKIP
         try:
             await save_user_interaction(user_id, prev_target_id, Actions.SKIP)
@@ -172,7 +173,7 @@ async def show_profiles(message: types.Message, state: FSMContext):
 
     try:
         logger.info("Пробуем получить рандомный профиль пользователя")
-        user = await get_random_profile(user_id)
+        user = await get_random_profile() if not registered else await get_profile_which_not_action(user_id)
         if not user:
             await message.answer("Анкеты пользователей закончились! Попробуйте позже.")
             await state.update_data(current_target_id=None, current_target_type=None)
