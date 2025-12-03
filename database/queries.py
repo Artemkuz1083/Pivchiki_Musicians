@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
-from sqlalchemy import select, update, delete, insert, func
+from sqlalchemy import select, update, delete, insert, func, exists, and_
 from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -399,15 +399,76 @@ async def update_band_seriousness_level(user_id: int, new_level: str) -> bool:
         await session.commit()
         return True
 
-async def get_random_profile(user_id: int) -> User | None:
-    """Получает рандомный профиль, исключая текущего пользователя"""
+
+async def get_random_profile(swiper_id: int, filters: Optional[Dict] = None) -> User | None:
+    """
+    Получает рандомный профиль, исключая текущего пользователя и уже просмотренные анкеты,
+    применяя заданные фильтры.
+    """
     async with AsyncSessionLocal() as session:
+
+        # 1. Базовый запрос
         stmt = (
             select(User)
-            .where(User.id != user_id)
-            .order_by(func.random())
-            .limit(1)
+            .where(
+                User.id != swiper_id,
+                User.is_visible == True
+            )
         )
+
+        conditions = []
+
+        # 2. Исключение уже просмотренных анкет (Лайк/Пропуск)
+        # Ищем записи в таблице UserLikesUser, где swiper_user_id — наш текущий пользователь.
+        # Исключаем тех target_user_id, которые уже есть в этой таблице.
+        viewed_subquery = (
+            select(UserLikesUser.target_user_id)
+            .where(UserLikesUser.swiper_user_id == swiper_id)
+        )
+        conditions.append(User.id.notin_(viewed_subquery))
+
+        # 3. Применение фильтров
+        if filters:
+
+            # Фильтр по Городу
+            if city := filters.get('city'):
+                conditions.append(User.city == city)
+
+            # Фильтр по Жанрам (UserGenre)
+            if genres := filters.get('genres'):
+                # Ищем пользователей, у которых есть хотя бы один из выбранных жанров
+                genres_exists = (
+                    select(UserGenre)
+                    .where(
+                        UserGenre.user_id == User.id,
+                        UserGenre.name.in_(genres)
+                    )
+                )
+                conditions.append(exists(genres_exists))
+
+            # Фильтр по Инструментам (Instrument)
+            if instruments := filters.get('instruments'):
+                # Ищем пользователей, у которых есть хотя бы один из выбранных инструментов
+                instruments_exists = (
+                    select(Instrument)
+                    .where(
+                        Instrument.user_id == User.id,
+                        Instrument.name.in_(instruments)
+                    )
+                )
+                conditions.append(exists(instruments_exists))
+
+            # Фильтр по минимальному уровню знаний (theoretical_knowledge_level)
+            if min_level := filters.get('min_level'):
+                # Ищем тех, у кого уровень теоретических знаний >= заданного
+                conditions.append(User.theoretical_knowledge_level >= int(min_level))
+
+        # Применяем все собранные условия к запросу
+        if conditions:
+            stmt = stmt.where(and_(*conditions))
+
+        # 4. Рандомный выбор
+        stmt = stmt.order_by(func.random()).limit(1)
 
         result = await session.execute(stmt)
         return result.unique().scalar_one_or_none()

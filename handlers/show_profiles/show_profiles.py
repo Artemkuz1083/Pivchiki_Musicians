@@ -11,6 +11,9 @@ from main import bot
 from states.states_show_profiles import ShowProfiles
 from database.enums import Actions
 
+from aiogram.fsm.state import default_state
+from handlers.show_profiles.show_keyboards import get_filter_menu_keyboard
+
 logger = logging.getLogger(__name__)
 
 router = Router()
@@ -318,3 +321,92 @@ def rating_to_stars(level: int) -> str:
     if level is None:
         level = 0
     return "⭐️" * level
+
+
+
+# 1. Хендлер открытия меню фильтров
+@router.message(F.text == "Фильтр 🔍", (ShowProfiles.show_bands | ShowProfiles.show_profiles))
+async def open_filter_menu(message: types.Message, state: FSMContext):
+    logger.info("Пользователь открыл меню фильтров")
+
+    data = await state.get_data()
+
+    # Сохраняем текущее состояние просмотра, чтобы потом вернуться
+    current_show_state = await state.get_state()
+    await state.update_data(previous_show_state=current_show_state)
+
+    # Получаем текущие фильтры (если они есть)
+    current_filters = data.get('filters', {})
+
+    await message.answer(
+        "⚙️ Настройка фильтров. Ваши текущие параметры:",
+        reply_markup=get_filter_menu_keyboard(current_filters)
+    )
+    await state.set_state(ShowProfiles.filter_menu)
+
+
+# 2. Хендлер возврата из меню фильтров
+@router.callback_query(F.data == "back_from_filters", ShowProfiles.filter_menu)
+async def back_to_showing(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    # Восстанавливаем предыдущее состояние просмотра
+    previous_state = data.get('previous_show_state', ShowProfiles.show_profiles)
+
+    await state.set_state(previous_state)
+    await callback.message.delete()
+
+    # Отправляем сообщение, чтобы сработала Reply-клавиатура "Следующая анкета"
+    # Это триггернет показ анкеты с новыми фильтрами
+    await callback.message.answer(
+        "Настройки фильтров применены.",
+        reply_markup=show_reply_keyboard_for_registered_users()
+    )
+    await callback.answer("Фильтры сохранены!")
+
+
+# 3. Хендлер сброса фильтров
+@router.callback_query(F.data == "reset_filters", ShowProfiles.filter_menu)
+async def reset_filters(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(filters={})
+
+    await callback.message.edit_text(
+        "🧹 Все фильтры сброшены до значений 'Все'.",
+        reply_markup=get_filter_menu_keyboard({})  # Показываем обновленное меню
+    )
+    await callback.answer("Фильтры сброшены!")
+
+
+# 4. Хендлер начала установки города
+@router.callback_query(F.data == "set_filter_city", ShowProfiles.filter_menu)
+async def start_set_city_filter(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "🏙️ Введите город, в котором хотите искать анкеты, или '0', чтобы искать везде:"
+    )
+    await state.set_state(ShowProfiles.filter_city)
+    await callback.answer()
+
+
+# 5. Хендлер сохранения города
+@router.message(ShowProfiles.filter_city)
+async def save_city_filter(message: types.Message, state: FSMContext):
+    city = message.text.strip()
+
+    data = await state.get_data()
+    filters = data.get('filters', {})
+
+    if city == '0':
+        if 'city' in filters:
+            del filters['city']
+        display_city = 'Все'
+    else:
+        filters['city'] = city
+        display_city = city
+
+    await state.update_data(filters=filters)
+
+    await message.answer(
+        f"✅ Фильтр по городу установлен: **{display_city}**",
+        reply_markup=get_filter_menu_keyboard(filters)
+    )
+    # Возвращаемся в меню фильтров
+    await state.set_state(ShowProfiles.filter_menu)
