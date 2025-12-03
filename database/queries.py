@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
 from sqlalchemy import select, update, delete, insert, func, exists, and_
+from sqlalchemy import select, update, delete, insert, func, exists
 from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -414,6 +415,14 @@ async def get_random_profile(swiper_id: int, filters: Optional[Dict] = None) -> 
                 User.id != swiper_id,
                 User.is_visible == True
             )
+async def get_random_profile() -> User | None:
+    """Получает рандомный профиль, исключая текущего пользователя"""
+    async with AsyncSessionLocal() as session:
+
+        stmt = (
+            select(User)
+            .order_by(func.random())
+            .limit(1)
         )
 
         conditions = []
@@ -473,14 +482,10 @@ async def get_random_profile(swiper_id: int, filters: Optional[Dict] = None) -> 
         result = await session.execute(stmt)
         return result.unique().scalar_one_or_none()
 
-
-async def get_random_group(exclude_group_id: int | None = None) -> GroupProfile | None:
+async def get_random_group() -> GroupProfile | None:
     """Получает рандомную группу, исключая текущую группу пользователя, если такая есть"""
     async with AsyncSessionLocal() as session:
         stmt = select(GroupProfile)
-
-        if exclude_group_id is not None:
-            stmt = stmt.where(GroupProfile.id != exclude_group_id)
 
         stmt = stmt.order_by(func.random()).limit(1)
 
@@ -511,3 +516,51 @@ async def save_group_interaction(swiper_id: int, target_group_id: int, action: A
         await session.execute(stmt)
         await session.commit()
 
+
+async def get_profile_which_not_action(swiper_id: int):
+    """Выводит нового пользователя исключая тех кого видел наш пользователь"""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(User)
+            .where(User.id != swiper_id)
+            .where(User.is_visible)
+            .where(
+                ~exists().where(
+                    (UserLikesUser.target_user_id == User.id) &
+                    (UserLikesUser.swiper_user_id == swiper_id)
+                )
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+
+        result = await session.execute(stmt)
+        user = result.scalars().first()
+        return user
+
+
+async def get_band_which_not_action(swiper_id: int):
+    """Выводим группу, где пользователь не является участников"""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(GroupProfile)
+            .where(GroupProfile.is_visible)
+            .where(
+                ~exists().where(
+                    (GroupMember.user_id == swiper_id) &
+                    (GroupMember.group_id == GroupProfile.id)
+                )
+            )
+            .where(
+                ~exists().where(
+                    (UserLikesGroup.target_group_id == GroupProfile.id) &
+                    (UserLikesGroup.swiper_user_id == swiper_id)
+                )
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+
+        result = await session.execute(stmt)
+        user = result.scalars().first()
+        return user
