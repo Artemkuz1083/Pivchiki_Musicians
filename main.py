@@ -10,6 +10,8 @@ from handlers.profile import profile
 from handlers.registration import registration
 from database.session import init_db
 from handlers.show_profiles import show_profiles
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,7 +26,7 @@ if os.path.exists(dotenv_path):
 TOKEN = os.getenv("BOT_TOKEN")
 
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 async def main():
