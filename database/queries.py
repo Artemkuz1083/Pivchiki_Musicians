@@ -1,7 +1,9 @@
 import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
+from venv import logger
 
+from sqlalchemy import select, update, delete, insert, func, exists, and_, or_
 from sqlalchemy import select, update, delete, insert, func, exists
 from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -399,18 +401,114 @@ async def update_band_seriousness_level(user_id: int, new_level: str) -> bool:
         await session.commit()
         return True
 
-async def get_random_profile() -> User | None:
-    """Получает рандомный профиль, исключая текущего пользователя"""
+
+async def get_random_profile(swiper_id: int, filters: dict = None) -> User | None:
     async with AsyncSessionLocal() as session:
+        # 1. Сначала получаем профиль самого пользователя, чтобы узнать его возраст
+        # Используем session.get для быстрого получения по PK
+        swiper_user = await session.get(User, swiper_id)
 
-        stmt = (
-            select(User)
-            .order_by(func.random())
-            .limit(1)
+        swiper_age = swiper_user.age if swiper_user else None
+
+        # 2. Базовые условия
+        conditions = [
+            User.id != swiper_id,
+            User.is_visible == True
+        ]
+
+        # 3. Исключение уже просмотренных
+        viewed_subquery = (
+            select(UserLikesUser.target_user_id)
+            .where(UserLikesUser.swiper_user_id == swiper_id)
         )
+        conditions.append(User.id.notin_(viewed_subquery))
 
-        result = await session.execute(stmt)
-        return result.unique().scalar_one_or_none()
+        # 4. Применение фильтров
+        instrument_sort_present = False
+
+        if filters:
+            # --- ФИЛЬТР ПО ГОРОДАМ ---
+            if cities := filters.get('cities'):
+                city_conditions = []
+                for city_name in cities:
+                    clean_name = city_name.strip()
+                    if clean_name:
+                        city_conditions.append(User.city.ilike(f"%{clean_name}%"))
+                if city_conditions:
+                    conditions.append(or_(*city_conditions))
+
+            # --- ФИЛЬТР ПО ЖАНРАМ ---
+            if genres := filters.get('genres'):
+                genres_exists = (
+                    select(UserGenre)
+                    .where(UserGenre.user_id == User.id, UserGenre.name.in_(genres))
+                )
+                conditions.append(exists(genres_exists))
+
+            # --- ФИЛЬТР ПО ИНСТРУМЕНТАМ ---
+            if instruments := filters.get('instruments'):
+                instrument_sort_present = True
+                conditions.append(Instrument.name.in_(instruments))
+
+            # --- ФИЛЬТР ПО ОПЫТУ (исправлено название поля) ---
+            if experience := filters.get('experience'):
+                conditions.append(User.has_performance_experience.in_(experience))
+
+            # --- ФИЛЬТР ПО ВОЗРАСТУ (НОВОЕ) ---
+            age_mode = filters.get('age_mode')
+
+            # Применяем фильтр только если он выбран И у нас есть возраст ищущего
+            if age_mode and age_mode != 'all' and swiper_age is not None:
+                # Обязательно фильтруем тех, у кого возраст вообще не указан,
+                # иначе сравнения < > могут вести себя некорректно или пропускать NULL
+                conditions.append(User.age.isnot(None))
+
+                if age_mode == 'peers':
+                    # Ровесники: диапазон +- 5 лет (можно настроить)
+                    conditions.append(User.age.between(swiper_age - 2, swiper_age + 2))
+
+                elif age_mode == 'older':
+                    # Старше: строго больше
+                    conditions.append(User.age > swiper_age)
+
+                elif age_mode == 'younger':
+                    # Младше: строго меньше
+                    conditions.append(User.age < swiper_age)
+
+            min_level = filters.get('min_level')
+
+            # Проверяем, что уровень задан и он является числом (не 'Все')
+            if isinstance(min_level, int):
+                # Сравниваем с theoretical_knowledge_level
+                conditions.append(User.theoretical_knowledge_level >= min_level)
+
+            # Если age_mode выбран, но у самого юзера нет возраста —
+            # мы просто ничего не добавляем в conditions.
+            # Получается, фильтр игнорируется, и он видит всех.
+
+        # 5. Формирование запроса
+        stmt = select(User).where(and_(*conditions))
+
+        # 6. Сортировка
+        if instrument_sort_present:
+            stmt = stmt.join(Instrument)
+            stmt = stmt.group_by(User.id)
+            stmt = stmt.order_by(
+                func.max(Instrument.proficiency_level).desc(),
+                func.random()
+            )
+        else:
+            stmt = stmt.order_by(func.random())
+
+        stmt = stmt.limit(1)
+
+        # 7. Выполнение
+        db_result = await session.execute(stmt)
+        result = db_result.unique().scalar_one_or_none()
+
+        return result
+
+#stop
 
 async def get_random_group() -> GroupProfile | None:
     """Получает рандомную группу, исключая текущую группу пользователя, если такая есть"""

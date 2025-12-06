@@ -1,4 +1,6 @@
 import datetime
+import html
+import logging
 from typing import Dict, Any, List
 
 from aiogram import types, Router, F
@@ -15,8 +17,10 @@ from handlers.band.showing_band_profile_logic import send_band_profile
 from handlers.enums.cities import City
 from handlers.enums.genres import Genre
 from handlers.enums.seriousness_level import SeriousnessLevel
-from handlers.registration.registration import logger
 from states.states_profile import ProfileStates
+
+# Настройка логгера
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -29,7 +33,10 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
     chat_id = callback.message.chat.id
 
     # 1. Удаляем инлайн-клавиатуру из сообщения, по которому был клик
-    await callback.message.edit_reply_markup(reply_markup=None)
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
     await state.update_data(user_id=user_id)
 
@@ -38,22 +45,21 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")]
     ])
 
-    # 3. Отправляем НОВОЕ сообщение с удалением реплай-клавиатуры
-
-    text: str
+    text: str = ""
 
     if param == "name":
-        text = "Введите новое название группы:"
+        text = "🎸 <b>Введите новое название группы:</b>"
         await state.set_state(BandEditingStates.editing_band_name)
     elif param == "year":
-        text = "Введите новый год основания (ГГГГ):"
+        text = "📅 <b>Введите новый год основания (ГГГГ):</b>"
         await state.set_state(BandEditingStates.editing_band_year)
 
-    # Отправка нового сообщения, удаляющего ReplyKeyboard
+    # 3. Отправляем НОВОЕ сообщение с удалением реплай-клавиатуры
     await callback.bot.send_message(
         chat_id=chat_id,
         text=text,
         reply_markup=back_markup,
+        parse_mode="HTML",
         # УДАЛЕНИЕ РЕПЛАЙ-КЛАВИАТУРЫ
         reply_keyboard=ReplyKeyboardRemove()
     )
@@ -61,17 +67,22 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(F.text, BandEditingStates.editing_band_name)
 async def process_new_band_name(message: types.Message, state: FSMContext):
-    new_name = message.text
+    new_name = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
 
     if len(new_name) > 100:
-        await message.answer("Название слишком длинное. Введите короче.")
+        await message.answer("⚠️ Название слишком длинное (макс. 100 символов). Введите короче.")
         return
 
-    await update_band_name(user_id, new_name)
+    try:
+        await update_band_name(user_id, new_name)
+    except Exception as e:
+        logger.error(f"Ошибка обновления названия группы: {e}")
+        await message.answer("⚠️ Ошибка при сохранении.")
+        return
 
-    success_msg = f"✅ Имя группы успешно обновлено на: **{new_name}**"
+    success_msg = f"✅ Название группы успешно обновлено на: <b>{html.escape(new_name)}</b>"
 
     await state.set_state(ProfileStates.select_param_to_fill)
     await send_band_profile(message, user_id, success_message=success_msg)
@@ -80,19 +91,24 @@ async def process_new_band_name(message: types.Message, state: FSMContext):
 
 @router.message(F.text, BandEditingStates.editing_band_year)
 async def process_new_band_year(message: types.Message, state: FSMContext):
-    year_text = message.text
+    year_text = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
 
     current_year = datetime.datetime.now().year
 
     if not year_text.isdigit() or int(year_text) < 1900 or int(year_text) > current_year:
-        await message.answer(f"Неверный формат. Введите год цифрами от 1900 до {current_year}.")
+        await message.answer(f"⚠️ Неверный формат. Введите год цифрами от 1900 до {current_year}.")
         return
 
-    await update_band_year(user_id, year_text)
+    try:
+        await update_band_year(user_id, year_text)
+    except Exception as e:
+        logger.error(f"Ошибка обновления года группы: {e}")
+        await message.answer("⚠️ Ошибка при сохранении.")
+        return
 
-    success_msg = f"✅ Год основания группы успешно обновлен на: **{year_text}**"
+    success_msg = f"✅ Год основания группы успешно обновлен на: <b>{html.escape(year_text)}</b>"
 
     await state.set_state(ProfileStates.select_param_to_fill)
     await send_band_profile(message, user_id, success_message=success_msg)
@@ -111,7 +127,7 @@ async def back_from_band_name_input(callback: types.CallbackQuery, state: FSMCon
     await send_band_profile(
         callback,
         user_id,
-        success_message="Редактирование отменено. Вы вернулись в меню группы."
+        success_message="❌ Редактирование отменено. Вы вернулись в меню группы."
     )
     await state.clear()
 
@@ -128,10 +144,11 @@ async def back_from_band_year_input(callback: types.CallbackQuery, state: FSMCon
     await send_band_profile(
         callback,
         user_id,
-        success_message="Редактирование отменено. Вы вернулись в меню бэнда."
+        success_message="❌ Редактирование отменено. Вы вернулись в меню группы."
     )
 
     await state.clear()
+
 
 @router.callback_query(F.data == "edit_band_genres")
 async def start_editing_band_genres(callback: types.CallbackQuery, state: FSMContext):
@@ -139,14 +156,14 @@ async def start_editing_band_genres(callback: types.CallbackQuery, state: FSMCon
     logger.info("Пользователь %s начал редактирование жанров группы", callback.from_user.id)
 
     user_id = callback.from_user.id
-    await callback.answer("Запуск редактирования жанров...")
+    await callback.answer("Загрузка жанров...")
 
     try:
         band_data = await get_band_data_by_user_id(user_id)
         current_genres = band_data.get("genres") if isinstance(band_data, dict) else []
     except Exception as e:
         logger.error(f"Ошибка при загрузке данных группы: {e}")
-        await callback.message.answer("Произошла ошибка при получении данных группы.")
+        await callback.message.answer("⚠️ Произошла ошибка при получении данных группы.")
         return
 
     standard_options = Genre.list_values()
@@ -159,12 +176,13 @@ async def start_editing_band_genres(callback: types.CallbackQuery, state: FSMCon
     markup = make_keyboard_for_band_genre(selected_genres)
 
     await callback.message.edit_text(
-        text="Выберите жанры, в которых играет ваша группа (они заменят текущие):",
+        text="🎶 <b>Жанры</b>\n\nВыберите жанры, в которых играет ваша группа (они заменят текущие):",
         reply_markup=markup,
-        parse_mode='Markdown'
+        parse_mode='HTML'
     )
 
     await state.set_state(BandEditingStates.editing_genres)
+
 
 @router.callback_query(F.data.startswith("genre_"), BandEditingStates.editing_genres)
 async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
@@ -178,11 +196,12 @@ async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
 
     if choose == "Свой вариант":
         back_button = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="edit_band_genres")]])
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_band_genres")]])
 
         await callback.message.edit_text(
-            text="Напишите жанр для вашей группы:",
-            reply_markup=back_button
+            text="📝 <b>Напишите жанр для вашей группы:</b>",
+            reply_markup=back_button,
+            parse_mode="HTML"
         )
         await state.set_state(BandEditingStates.inputting_own_genre)
         return
@@ -198,24 +217,32 @@ async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.update_data(user_choice_genre=user_choice)
 
+
 @router.message(F.text, BandEditingStates.inputting_own_genre)
 async def own_band_genre(message: types.Message, state: FSMContext):
     """Обработка собственного жанра для группы. Сохраняем и возвращаемся к выбору."""
     logger.info("Пользователь %s ввел собственный жанр для группы: %s", message.from_user.id, message.text)
 
-    new_genre = message.text
+    new_genre = message.text.strip()
     data = await state.get_data()
     own_user_genre = data.get("own_user_genre", [])
     user_choice = data.get("user_choice_genre", [])
 
+    if new_genre.startswith('/'):
+        await message.answer("⚠️ Название жанра не может начинаться с '/'.\n<b>Напишите жанр:</b>", parse_mode="HTML")
+        return
+
     own_user_genre.append(new_genre)
     await state.update_data(own_user_genre=own_user_genre)
 
-    msg_text = (f"Свой вариант: {', '.join(own_user_genre)}\n"
-                "Отлично! Теперь выберите жанры, в которых играет ваша группа:")
+    formatted_own = ", ".join([f"<i>{html.escape(g)}</i>" for g in own_user_genre])
 
-    await message.answer(text=msg_text, reply_markup=make_keyboard_for_band_genre(user_choice))
+    msg_text = (f"✅ Свой вариант добавлен: {formatted_own}\n\n"
+                "<b>Выберите еще жанры, или нажмите 'Готово':</b>")
+
+    await message.answer(text=msg_text, reply_markup=make_keyboard_for_band_genre(user_choice), parse_mode="HTML")
     await state.set_state(BandEditingStates.editing_genres)
+
 
 @router.callback_query(F.data == "done_editing_band_genres")
 async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
@@ -231,7 +258,7 @@ async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     if not all_genres_user:
-        await callback.answer("Пожалуйста, выберите хотя бы один жанр.")
+        await callback.answer("⚠️ Пожалуйста, выберите хотя бы один жанр.", show_alert=True)
         return
 
     try:
@@ -241,7 +268,7 @@ async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
         logger.error("Ошибка при сохранении жанров группы пользователя %s: %s", user_id, e)
         await state.clear()
         await send_band_profile(callback, user_id,
-                                success_message="Произошла ошибка при сохранении жанров. Попробуйте позже.")
+                                success_message="⚠️ Произошла ошибка при сохранении жанров. Попробуйте позже.")
         return
 
     await state.clear()
@@ -251,7 +278,8 @@ async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
         success_message="Жанры группы успешно обновлены!"
     )
 
-@router.message(F.text == "Моя группа")
+
+@router.message(F.text == "🎸 Моя группа")
 async def show_my_group_profile(message: types.Message):
     """
     Обрабатывает нажатие на реплай-кнопку "Моя группа" и отправляет профиль.
@@ -262,6 +290,7 @@ async def show_my_group_profile(message: types.Message):
         user_id=user_id,
         success_message=None
     )
+
 
 def make_keyboard_for_band_genre(selected: list[str]) -> InlineKeyboardMarkup:
     """
@@ -291,9 +320,10 @@ def make_keyboard_for_band_genre(selected: list[str]) -> InlineKeyboardMarkup:
 
     # Добавляем кнопки "Готово" и "Назад" в отдельные строки (одна колонка)
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_editing_band_genres")])
-    buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_params")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 def make_keyboard_for_city_editing(selected_city: str | None = None) -> InlineKeyboardMarkup:
     """Клавиатура городов для редактирования с кнопкой 'Назад'."""
@@ -306,7 +336,7 @@ def make_keyboard_for_city_editing(selected_city: str | None = None) -> InlineKe
         builder.add(InlineKeyboardButton(text=text, callback_data=f"edit_city_{city}"))
 
     builder.adjust(2)
-    builder.row(InlineKeyboardButton(text="Свой вариант", callback_data="edit_city_Свой вариант"))
+    builder.row(InlineKeyboardButton(text="Свой вариант 📝", callback_data="edit_city_Свой вариант"))
     builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params"))
 
     return builder.as_markup()
@@ -319,14 +349,18 @@ async def start_editing_city(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer("Редактирование города...")
 
     # Загружаем текущий город для подсветки
-    band_data = await get_band_data_by_user_id(user_id)
-    current_city = band_data.get("city") if isinstance(band_data.get("city"), str) else None
+    try:
+        band_data = await get_band_data_by_user_id(user_id)
+        current_city = band_data.get("city") if isinstance(band_data.get("city"), str) else None
+    except Exception:
+        current_city = None
 
     await state.update_data(user_id=user_id, city=current_city)
 
     await callback.message.edit_text(
-        "Выберите новый город для вашей группы:",
-        reply_markup=make_keyboard_for_city_editing(current_city)
+        "🏙 <b>Выберите новый город для вашей группы:</b>",
+        reply_markup=make_keyboard_for_city_editing(current_city),
+        parse_mode="HTML"
     )
     await state.set_state(BandEditingStates.editing_city)
 
@@ -344,8 +378,9 @@ async def process_edited_city(callback: types.CallbackQuery, state: FSMContext):
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к выбору", callback_data="back_to_city_editing")]])
 
         await callback.message.edit_text(
-            text="Напишите новый город для вашей группы:",
-            reply_markup=back_markup
+            text="📝 <b>Напишите новый город для вашей группы:</b>",
+            reply_markup=back_markup,
+            parse_mode="HTML"
         )
         await state.set_state(BandEditingStates.inputting_own_city)
         return
@@ -354,25 +389,25 @@ async def process_edited_city(callback: types.CallbackQuery, state: FSMContext):
     await update_band_city(user_id, city)
     await state.clear()
 
-    success_msg = f"✅ Город группы успешно обновлен на: **{city}**"
+    success_msg = f"✅ Город группы успешно обновлен на: <b>{html.escape(city)}</b>"
     await send_band_profile(callback, user_id, success_message=success_msg)
 
 
 @router.message(F.text, BandEditingStates.inputting_own_city)
 async def process_edited_own_city(message: types.Message, state: FSMContext):
     """Обрабатывает ввод собственного города при редактировании."""
-    new_city = message.text
+    new_city = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
 
     if new_city.startswith('/'):
-        await message.answer("Название города не может начинаться с '/'. Введите корректное название.")
+        await message.answer("⚠️ Название города не может начинаться с '/'. Введите корректное название.")
         return
 
     await update_band_city(user_id, new_city)
     await state.clear()
 
-    success_msg = f"✅ Город группы успешно обновлен на: **{new_city}**"
+    success_msg = f"✅ Город группы успешно обновлен на: <b>{html.escape(new_city)}</b>"
     await send_band_profile(message, user_id, success_message=success_msg)
 
 
@@ -383,8 +418,9 @@ async def back_to_city_selection_editing(callback: types.CallbackQuery, state: F
     current_city = data.get("city")
 
     await callback.message.edit_text(
-        "Выберите новый город для вашей группы:",
-        reply_markup=make_keyboard_for_city_editing(current_city)
+        "🏙 <b>Выберите новый город для вашей группы:</b>",
+        reply_markup=make_keyboard_for_city_editing(current_city),
+        parse_mode="HTML"
     )
     await state.set_state(BandEditingStates.editing_city)
     await callback.answer()
@@ -400,12 +436,13 @@ async def start_editing_description(callback: types.CallbackQuery, state: FSMCon
 
     back_markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")],
-        [InlineKeyboardButton(text="Удалить описание", callback_data="delete_band_description")]
+        [InlineKeyboardButton(text="🗑 Удалить описание", callback_data="delete_band_description")]
     ])
 
     await callback.message.edit_text(
-        "Введите новое описание группы (до 1024 символов) или нажмите 'Удалить описание':",
-        reply_markup=back_markup
+        "📝 <b>Введите новое описание группы</b> (до 1024 символов) или нажмите 'Удалить описание':",
+        reply_markup=back_markup,
+        parse_mode="HTML"
     )
     await state.set_state(BandEditingStates.editing_description)
 
@@ -413,15 +450,21 @@ async def start_editing_description(callback: types.CallbackQuery, state: FSMCon
 @router.message(F.text, BandEditingStates.editing_description)
 async def process_edited_description(message: types.Message, state: FSMContext):
     """Обрабатывает ввод нового описания."""
-    new_description = message.text
+    new_description = message.text.strip()
     data = await state.get_data()
     user_id = data.get("user_id")
 
     if len(new_description) > 1024:
-        await message.answer("Описание слишком длинное. Введите короче.")
+        await message.answer("⚠️ Описание слишком длинное. Введите короче.")
         return
 
-    await update_band_description(user_id, new_description)
+    try:
+        await update_band_description(user_id, new_description)
+    except Exception as e:
+        logger.error(f"Ошибка сохранения описания группы: {e}")
+        await message.answer("⚠️ Ошибка при сохранении.")
+        return
+
     await state.clear()
 
     success_msg = f"✅ Описание группы успешно обновлено!"
@@ -463,8 +506,9 @@ async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(user_id=user_id)
 
     await callback.message.edit_text(
-        "Выберите новый уровень серьезности вашей группы:",
-        reply_markup=make_keyboard_for_level_editing()
+        "📊 <b>Выберите новый уровень серьезности вашей группы:</b>",
+        reply_markup=make_keyboard_for_level_editing(),
+        parse_mode="HTML"
     )
     await state.set_state(BandEditingStates.editing_seriousness_level)
 
@@ -479,11 +523,11 @@ async def process_edited_level(callback: types.CallbackQuery, state: FSMContext)
     try:
         selected_level = SeriousnessLevel[level_key]
     except KeyError:
-        await callback.answer("Неверный выбор уровня.")
+        await callback.answer("⚠️ Неверный выбор уровня.")
         return
 
     await update_band_seriousness_level(user_id, selected_level.value)
     await state.clear()
 
-    success_msg = f"✅ Уровень серьезности успешно обновлен на: **{selected_level.value}**"
+    success_msg = f"✅ Уровень серьезности успешно обновлен на: <b>{html.escape(selected_level.value)}</b>"
     await send_band_profile(callback, user_id, success_message=success_msg)
