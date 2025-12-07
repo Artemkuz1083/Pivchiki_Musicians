@@ -39,15 +39,15 @@ async def start(message: types.Message, state: FSMContext):
             band_exists = True
 
         kb = [
-            [types.KeyboardButton(text="Моя анкета")],
-            [types.KeyboardButton(text="Смотреть анкеты")],
+            [types.KeyboardButton(text="👤 Моя анкета")],
+            [types.KeyboardButton(text="🔍 Смотреть анкеты")],
         ]
 
         # 2. Условное добавление кнопки "Зарегистрировать группу"
         if not band_exists:
-            kb.append([types.KeyboardButton(text="Зарегистрировать группу")])
+            kb.append([types.KeyboardButton(text="🎸 Зарегистрировать группу")])
         else:
-            kb.append([types.KeyboardButton(text="Моя группа")])  # Эта кнопка всегда должна быть в конце
+            kb.append([types.KeyboardButton(text="🎸 Моя группа")])  # Эта кнопка всегда должна быть в конце
 
 
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
