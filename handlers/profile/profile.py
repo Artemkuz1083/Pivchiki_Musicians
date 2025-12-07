@@ -19,7 +19,6 @@ from handlers.profile.profile_keyboards import get_instrument_selection_keyboard
     make_keyboard_for_city
 from states.states_profile import ProfileStates
 
-# Настраиваем логгер, если он не настроен глобально
 logger = logging.getLogger(__name__)
 
 router = Router()
@@ -48,7 +47,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     try:
         user_obj = await get_user(user_id)
     except Exception as e:
-        logger.error("Ошибка при получении данных пользователя в send_updated_profile: %s", e)
+        logger.error("Ошибка при получении данных пользователя %s в send_updated_profile: %s", user_id, e)
         await bot.send_message(chat_id, "⚠️ Произошла ошибка при доступе к профилю.")
         return
 
@@ -116,15 +115,17 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     if user_obj.photo_path:
         try:
             await bot.send_photo(chat_id, photo=user_obj.photo_path, caption="📸 <b>Фото профиля</b>", parse_mode="HTML")
+            logger.info("Пользователю %s отправлено фото профиля", user_id)
         except Exception as e:
-            logger.error("Ошибка отправки фото по file_id: %s", e)
+            logger.error("Ошибка отправки фото по file_id для %s: %s", user_id, e)
             await bot.send_message(chat_id, "⚠️ Фото профиля не удалось загрузить.")
 
     if user_obj.audio_path:
         try:
             await bot.send_audio(chat_id, audio=user_obj.audio_path, caption="🎧 <b>Демо-трек</b>", parse_mode="HTML")
+            logger.info("Пользователю %s демо-трек", user_id)
         except Exception as e:
-            logger.error("Ошибка отправки аудио по file_id: %s", e)
+            logger.error("Ошибка отправки аудио по file_id для %s: %s", user_id, e)
             await bot.send_message(chat_id, "⚠️ Демо-трек не удалось загрузить.")
 
     keyboard = get_profile_selection_keyboard()
@@ -137,6 +138,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
             parse_mode="HTML",
             disable_web_page_preview=True
         )
+        logger.info("Пользователю %s отправлена обновленная анкета", user_id)
     except Exception as e:
         logger.error("Ошибка отправки профиля пользователю %s: %s", user_id, e)
         # Fallback (упрощенный текст)
@@ -152,6 +154,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
 async def _show_profile_logic(event: types.Message | types.CallbackQuery, state: FSMContext):
     """Универсальная логика для показа анкеты."""
     user_id = event.from_user.id
+    logger.info("Пользователь %s запросил свою анкету", user_id)
 
     if isinstance(event, types.CallbackQuery):
         await event.answer()
@@ -162,7 +165,7 @@ async def _show_profile_logic(event: types.Message | types.CallbackQuery, state:
     try:
         user_obj = await get_user(user_id)
     except Exception as e:
-        logger.error(f"Ошибка при получении данных: {e}")
+        logger.error("Ошибка при получении данных пользователя %s: %s", user_id, e)
         await message_source.answer("⚠️ Произошла ошибка при доступе к профилю.")
         return
 
@@ -171,6 +174,7 @@ async def _show_profile_logic(event: types.Message | types.CallbackQuery, state:
     if user_obj:
         await send_updated_profile(event, user_id)
     else:
+        logger.warning("Анкета пользователя %s не найдена, предлагаем регистрацию", user_id)
         reply_keyboard_builder = ReplyKeyboardBuilder()
         reply_keyboard_builder.row(KeyboardButton(text="Let's go 🚀"))
 
@@ -193,6 +197,8 @@ async def show_profile_from_text_button(message: types.Message, state: FSMContex
 
 @router.callback_query(F.data == "fill_profile")
 async def start_filling_profile(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s перешел в режим редактирования профиля", user_id)
     await callback.answer()
     await callback.message.edit_reply_markup(reply_markup=None)
     await state.set_state(ProfileStates.select_param_to_fill)
@@ -207,6 +213,8 @@ async def start_filling_profile(callback: types.CallbackQuery, state: FSMContext
 
 @router.callback_query(F.data == "edit_age")
 async def ask_for_age(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование возраста", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.filling_age)
 
@@ -230,6 +238,7 @@ async def process_new_age(message: types.Message, state: FSMContext):
         if not (0 <= new_age <= 100):
             raise ValueError("Возраст вне диапазона")
     except ValueError:
+        logger.warning("Пользователь %s ввел неверный возраст: %s", user_id, new_age_str)
         await message.answer(
             "⚠️ <b>Неверный ввод.</b>\nПожалуйста, введите возраст как целое число от 0 до 100."
         )
@@ -237,8 +246,9 @@ async def process_new_age(message: types.Message, state: FSMContext):
 
     try:
         await update_user(user_id=user_id, age=new_age)
+        logger.info("Пользователь %s обновил возраст на %d", user_id, new_age)
     except Exception as e:
-        logger.error(f"Ошибка сохранения возраста: {e}")
+        logger.error("Ошибка сохранения возраста пользователя %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения. Попробуйте позже.")
         await state.set_state(ProfileStates.select_param_to_fill)
         return
@@ -249,11 +259,13 @@ async def process_new_age(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "edit_level")
 async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
     user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование уровня владения инструментами", user_id)
+    await callback.answer()
     user_obj = await get_user(user_id)
 
     if not user_obj or not user_obj.instruments:
+        logger.warning("Пользователь %s пытался редактировать уровень, не имея инструментов", user_id)
         await callback.message.edit_text(
             "⚠️ <b>У вас пока нет инструментов.</b>\nСначала добавьте их в разделе 'Инструменты'.",
             reply_markup=get_profile_selection_keyboard(),
@@ -275,6 +287,8 @@ async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "edit_theory")
 async def start_selecting_theory_level_emoji(callback: types.CallbackQuery, state: FSMContext):
     """Версия с эмодзи (звездами)"""
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование уровня муз. теории", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.selecting_theory_level)
 
@@ -288,6 +302,7 @@ async def start_selecting_theory_level_emoji(callback: types.CallbackQuery, stat
 
 @router.callback_query(F.data.startswith("set_level:"), ProfileStates.filling_level)
 async def process_new_level_callback(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     await callback.answer()
     parts = callback.data.split(":")
     instrument_id = int(parts[1])
@@ -295,28 +310,34 @@ async def process_new_level_callback(callback: types.CallbackQuery, state: FSMCo
 
     try:
         await update_instrument_level(instrument_id, new_level)
-    except Exception:
+        logger.info("Пользователь %s обновил уровень инструмента ID=%d до %d", user_id, instrument_id, new_level)
+    except Exception as e:
+        logger.error("Ошибка обновления уровня инструмента ID=%d для %s: %s", instrument_id, user_id, e)
         return
 
     await state.set_state(ProfileStates.select_param_to_fill)
     await send_updated_profile(
         callback,
-        callback.from_user.id,
+        user_id,
         success_message=f"Уровень владения обновлен до {rating_to_stars(new_level)}!"
     )
 
 
 @router.callback_query(F.data.startswith("edit_instrument_level:"), ProfileStates.select_instrument_to_edit)
 async def select_instrument_for_level_edit(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     await callback.answer()
     try:
         parts = callback.data.split(":")
         instrument_id = int(parts[1])
         instrument_name = parts[2].replace("_", " ")
-    except (IndexError, ValueError):
+    except (IndexError, ValueError) as e:
+        logger.error("Ошибка при разборе ID инструмента от %s: %s", user_id, e)
         await callback.message.edit_text("⚠️ Ошибка выбора инструмента.")
         return
 
+    logger.info("Пользователь %s выбрал инструмент '%s' (ID=%d) для оценки уровня", user_id, instrument_name,
+                instrument_id)
     await state.set_state(ProfileStates.filling_level)
 
     await callback.message.edit_text(
@@ -329,6 +350,8 @@ async def select_instrument_for_level_edit(callback: types.CallbackQuery, state:
 
 @router.callback_query(F.data == "edit_experience")
 async def start_editing_experience(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование опыта выступлений", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.selecting_experience_type)
     await callback.message.edit_text(
@@ -341,17 +364,23 @@ async def start_editing_experience(callback: types.CallbackQuery, state: FSMCont
 
 @router.callback_query(F.data.startswith("select_exp:"), ProfileStates.selecting_experience_type)
 async def process_experience_type(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
     user_id = callback.from_user.id
+    await callback.answer()
     experience_name = callback.data.split(":")[1]
 
     try:
         selected_experience = PerformanceExperience[experience_name]
     except KeyError:
+        logger.error("Неизвестный тип опыта '%s' от пользователя %s", experience_name, user_id)
         await callback.message.edit_text("⚠️ Ошибка выбора.")
         return
 
-    await update_user_experience(user_id, selected_experience)
+    try:
+        await update_user_experience(user_id, selected_experience)
+        logger.info("Пользователь %s обновил опыт выступлений на: %s", user_id, selected_experience.value)
+    except Exception as e:
+        logger.error("Ошибка сохранения опыта выступлений для %s: %s", user_id, e)
+
     await state.set_state(ProfileStates.select_param_to_fill)
     await state.clear()
 
@@ -365,6 +394,8 @@ async def process_experience_type(callback: types.CallbackQuery, state: FSMConte
 # Дублирующая функция для теории (текстовая), если используется она
 @router.callback_query(F.data == "edit_theory_text")
 async def start_selecting_theory_level_text(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование уровня муз. теории (текст)", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.selecting_theory_level)
     await callback.message.edit_text(
@@ -377,17 +408,19 @@ async def start_selecting_theory_level_text(callback: types.CallbackQuery, state
 
 @router.callback_query(F.data.startswith("set_theory_level:"), ProfileStates.selecting_theory_level)
 async def process_selected_theory_level(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
     user_id = callback.from_user.id
+    await callback.answer()
     try:
         new_level = int(callback.data.split(":")[1])
     except ValueError:
+        logger.error("Неверный уровень теории от пользователя %s: %s", user_id, callback.data)
         return
 
     try:
         await update_user_theory_level(user_id=user_id, theory_level=new_level)
+        logger.info("Пользователь %s обновил уровень теории на %d", user_id, new_level)
     except Exception as e:
-        logger.error(f"Ошибка сохранения теории: {e}")
+        logger.error("Ошибка сохранения уровня теории для %s: %s", user_id, e)
 
     await state.set_state(ProfileStates.select_param_to_fill)
     await state.clear()
@@ -401,6 +434,8 @@ async def process_selected_theory_level(callback: types.CallbackQuery, state: FS
 
 @router.callback_query(F.data == "edit_files")
 async def start_uploading_files(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал загрузку аудио/демо", user_id)
     await callback.answer()
     await state.set_data({})
     await state.set_state(ProfileStates.uploading_files)
@@ -433,7 +468,9 @@ async def handle_uploaded_audio_content(message: types.Message, state: FSMContex
     if file_id:
         try:
             await save_user_audio(user_id=user_id, file_id=file_id)
-        except Exception:
+            logger.info("Пользователь %s обновил демо-трек (%s)", user_id, content_type)
+        except Exception as e:
+            logger.error("Ошибка сохранения аудио от %s: %s", user_id, e)
             await message.answer("⚠️ Ошибка сохранения. Попробуйте позже.")
             return
 
@@ -445,6 +482,8 @@ async def handle_uploaded_audio_content(message: types.Message, state: FSMContex
 
 @router.callback_query(F.data == "edit_photo")
 async def start_uploading_photo(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал загрузку фото", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.uploading_profile_photo)
 
@@ -465,7 +504,9 @@ async def handle_uploaded_photo(message: types.Message, state: FSMContext):
     photo_file_id = message.photo[-1].file_id
     try:
         await save_user_profile_photo(user_id=user_id, file_id=photo_file_id)
-    except Exception:
+        logger.info("Пользователь %s обновил фото профиля", user_id)
+    except Exception as e:
+        logger.error("Ошибка сохранения фото от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения фото.")
         return
 
@@ -477,13 +518,17 @@ async def handle_uploaded_photo(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "back_to_params")
 async def process_back_to_params(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s вернулся в меню параметров редактирования", user_id)
     await callback.answer("Отмена")
     await state.set_state(ProfileStates.select_param_to_fill)
-    await send_updated_profile(callback, callback.from_user.id, success_message="Действие отменено.")
+    await send_updated_profile(callback, user_id, success_message="Действие отменено.")
 
 
 @router.callback_query(F.data == "edit_name")
 async def ask_for_name(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование имени", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.filling_name)
 
@@ -504,7 +549,9 @@ async def process_new_name(message: types.Message, state: FSMContext):
 
     try:
         await update_user_name(user_id, new_name)
-    except Exception:
+        logger.info("Пользователь %s обновил имя на: %s", user_id, new_name)
+    except Exception as e:
+        logger.error("Ошибка сохранения имени от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения.")
         await state.set_state(ProfileStates.select_param_to_fill)
         return
@@ -515,6 +562,8 @@ async def process_new_name(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "edit_city")
 async def ask_for_city(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование города", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.filling_city)
 
@@ -530,16 +579,20 @@ async def process_new_city(callback: types.CallbackQuery, state: FSMContext):
     city = callback.data.split("_")[1]
     user_id = callback.from_user.id
 
-    if city.startswith('Свой вариант'):
+    if city == 'Свой вариант':
+        logger.info("Пользователь %s выбрал ввод собственного города", user_id)
         await callback.message.edit_text(text="🏙 <b>Напишите название вашего города:</b>", parse_mode="HTML")
         await state.set_state(ProfileStates.own_city)
         return
 
     try:
         await update_user_city(user_id, city)
-    except Exception:
+        logger.info("Пользователь %s обновил город на: %s", user_id, city)
+    except Exception as e:
+        logger.error("Ошибка сохранения города от %s: %s", user_id, e)
         return
 
+    await state.set_state(ProfileStates.select_param_to_fill)
     await send_updated_profile(callback, user_id, success_message=f"Город обновлен: <b>{city}</b>")
     await callback.answer()
 
@@ -551,7 +604,9 @@ async def process_new_own_city(message: types.Message, state: FSMContext):
 
     try:
         await update_user_city(user_id, new_city)
-    except Exception:
+        logger.info("Пользователь %s ввел собственный город: %s", user_id, new_city)
+    except Exception as e:
+        logger.error("Ошибка сохранения собственного города от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения.")
         await state.set_state(ProfileStates.select_param_to_fill)
         return
@@ -562,9 +617,11 @@ async def process_new_own_city(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "edit_instruments")
 async def start_editing_instruments(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование инструментов", user_id)
     await callback.answer()
 
-    user_obj = await get_user(callback.from_user.id)
+    user_obj = await get_user(user_id)
     current_instruments = user_obj.instruments if user_obj and user_obj.instruments else []
     all_current_inst_names = [inst.name for inst in current_instruments]
     standard_options = Instruments.list_values()
@@ -587,16 +644,21 @@ async def start_editing_instruments(callback: types.CallbackQuery, state: FSMCon
 
 @router.callback_query(F.data.startswith("edit_inst_"), ProfileStates.instrument_edit)
 async def process_instrument_selection_in_edit(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     await callback.answer()
     instrument_name = callback.data.split("_", 2)[2]
     data = await state.get_data()
     selected_inst: list = data.get("user_choice_inst", [])
 
+    action = ""
     if instrument_name in selected_inst:
         selected_inst.remove(instrument_name)
+        action = "удалил"
     else:
         selected_inst.append(instrument_name)
+        action = "добавил"
 
+    logger.info("Пользователь %s %s стандартный инструмент: %s", user_id, action, instrument_name)
     await state.update_data(user_choice_inst=selected_inst)
     markup = get_edit_instruments_keyboard(selected_inst)
 
@@ -608,27 +670,35 @@ async def process_instrument_selection_in_edit(callback: types.CallbackQuery, st
 
 @router.callback_query(F.data == "input_own_instrument", ProfileStates.instrument_edit)
 async def ask_for_own_instrument(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s запросил ввод собственного инструмента", user_id)
     await callback.answer()
     await callback.message.edit_text(
         "📝 <b>Введите название инструмента:</b>",
         parse_mode="HTML"
     )
+    await state.set_state(ProfileStates.instrument_edit)
 
 
 @router.message(ProfileStates.instrument_edit, F.text)
 async def process_own_instrument_in_edit(message: types.Message, state: FSMContext):
     new_instrument_name = message.text.strip()
+    user_id = message.from_user.id
     data = await state.get_data()
 
     own_inst: list = data.get("own_user_inst", [])
     selected_inst: list = data.get("user_choice_inst", [])
 
     if new_instrument_name in selected_inst or new_instrument_name in own_inst:
+        logger.warning("Пользователь %s попытался добавить уже существующий инструмент: %s", user_id,
+                       new_instrument_name)
         await message.answer("⚠️ Этот инструмент уже добавлен. Введите другой или нажмите 'Готово'.")
         return
 
     own_inst.append(new_instrument_name)
     await state.update_data(own_user_inst=own_inst)
+    logger.info("Пользователь %s добавил собственный инструмент: %s. Всего своих: %d", user_id, new_instrument_name,
+                len(own_inst))
 
     markup = get_edit_instruments_keyboard(selected_inst)
 
@@ -638,12 +708,14 @@ async def process_own_instrument_in_edit(message: types.Message, state: FSMConte
         reply_markup=markup,
         parse_mode='HTML'
     )
+    await state.set_state(ProfileStates.instrument_edit)
 
 
 async def _send_level_selection_menu(callback: types.CallbackQuery, state: FSMContext, user_id: int):
     user_obj = await get_user(user_id)
 
     if not user_obj or not user_obj.instruments:
+        logger.error("Инструменты не найдены для пользователя %s после сохранения.", user_id)
         await callback.message.edit_text(
             "⚠️ Инструменты не найдены.",
             reply_markup=get_profile_selection_keyboard()
@@ -663,8 +735,9 @@ async def _send_level_selection_menu(callback: types.CallbackQuery, state: FSMCo
 
 @router.callback_query(F.data == "instruments_ready_edit", ProfileStates.instrument_edit)
 async def finalize_instrument_editing(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer("Сохранение...")
     user_id = callback.from_user.id
+    logger.info("Пользователь %s завершает редактирование списка инструментов", user_id)
+    await callback.answer("Сохранение...")
     data = await state.get_data()
 
     selected_inst = data.get("user_choice_inst", [])
@@ -673,8 +746,9 @@ async def finalize_instrument_editing(callback: types.CallbackQuery, state: FSMC
 
     try:
         await update_user_instruments(user_id, all_instruments)
+        logger.info("Пользователь %s сохранил %d инструментов", user_id, len(all_instruments))
     except Exception as e:
-        logger.error(f"Ошибка сохранения инструментов: {e}")
+        logger.error("Ошибка сохранения инструментов для %s: %s", user_id, e)
         await callback.message.answer("⚠️ Ошибка сохранения.")
         await state.set_state(ProfileStates.select_param_to_fill)
         return
@@ -684,6 +758,8 @@ async def finalize_instrument_editing(callback: types.CallbackQuery, state: FSMC
 
 @router.callback_query(F.data == "edit_link")
 async def start_filling_link(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование внешней ссылки", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.filling_external_link)
 
@@ -705,7 +781,9 @@ async def process_external_link(message: types.Message, state: FSMContext):
 
     try:
         await update_user(user_id=user_id, external_link=new_link)
-    except Exception:
+        logger.info("Пользователь %s обновил внешнюю ссылку: %s", user_id, new_link)
+    except Exception as e:
+        logger.error("Ошибка сохранения ссылки от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения ссылки.")
         return
 
@@ -715,8 +793,9 @@ async def process_external_link(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "edit_genres")
 async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer("Загрузка...")
     user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование жанров", user_id)
+    await callback.answer("Загрузка...")
     user_obj = await get_user(user_id)
     current_genre_names = [g.name for g in user_obj.genres] if user_obj and user_obj.genres else []
 
@@ -737,12 +816,14 @@ async def start_editing_genres(callback: types.CallbackQuery, state: FSMContext)
 
 @router.callback_query(F.data.startswith("genre_"), ProfileStates.genre)
 async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     await callback.answer()
     choose = callback.data.split("_")[1]
     data = await state.get_data()
     user_choice = data.get("user_choice_genre", [])
 
     if choose == "Свой вариант":
+        logger.info("Пользователь %s запросил ввод собственного жанра при редактировании", user_id)
         back_button = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_params")]])
 
@@ -754,11 +835,15 @@ async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(ProfileStates.own_genre)
         return
 
+    action = ""
     if choose in user_choice:
         user_choice.remove(choose)
+        action = "удалил"
     else:
         user_choice.append(choose)
+        action = "добавил"
 
+    logger.info("Пользователь %s %s жанр: %s", user_id, action, choose)
     await state.update_data(user_choice_genre=user_choice)
     await callback.message.edit_reply_markup(reply_markup=make_keyboard_for_genre(user_choice))
 
@@ -766,12 +851,14 @@ async def choose_genre(callback: types.CallbackQuery, state: FSMContext):
 @router.message(F.text, ProfileStates.own_genre)
 async def own_genre(message: types.Message, state: FSMContext):
     new_genre = message.text
+    user_id = message.from_user.id
     data = await state.get_data()
     own_user_genre = data.get("own_user_genre", [])
     user_choice = data.get("user_choice_genre", [])
 
     own_user_genre.append(new_genre)
     await state.update_data(own_user_genre=own_user_genre)
+    logger.info("Пользователь %s добавил собственный жанр: %s", user_id, new_genre)
 
     msg_text = (
         f"✅ Добавлен свой вариант: <b>{html.escape(new_genre)}</b>\n"
@@ -784,20 +871,23 @@ async def own_genre(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "done_genres", ProfileStates.genre)
 async def done_genres(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     await callback.answer()
     data = await state.get_data()
     user_choice = data.get("user_choice_genre", [])
     own_user_genre = data.get("own_user_genre", [])
     all_genres_user = user_choice + own_user_genre
-    user_id = callback.from_user.id
 
     if not all_genres_user:
+        logger.warning("Пользователь %s попытался сохранить пустой список жанров", user_id)
         await callback.message.answer("⚠️ Пожалуйста, выберите хотя бы один жанр.")
         return
 
     try:
         await update_user_genres(user_id, all_genres_user)
-    except Exception:
+        logger.info("Пользователь %s сохранил %d жанров: %s", user_id, len(all_genres_user), all_genres_user)
+    except Exception as e:
+        logger.error("Ошибка сохранения жанров для %s: %s", user_id, e)
         await state.set_state(ProfileStates.select_param_to_fill)
         await send_updated_profile(callback, user_id, success_message="⚠️ Ошибка при сохранении.")
         return
@@ -808,6 +898,8 @@ async def done_genres(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "edit_about_me")
 async def ask_for_about_me(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование 'О себе'", user_id)
     await callback.answer()
     await state.set_state(ProfileStates.filling_about_me)
 
@@ -828,12 +920,15 @@ async def process_new_about_me(message: types.Message, state: FSMContext):
     about_me_text = message.text.strip()
 
     if len(about_me_text) > 1000:
+        logger.warning("Пользователь %s ввел слишком длинный текст 'О себе'", user_id)
         await message.answer("⚠️ Текст слишком длинный (максимум 1000 символов).")
         return
 
     try:
         await update_user_about_me(user_id, about_me_text)
-    except Exception:
+        logger.info("Пользователь %s обновил раздел 'О себе'", user_id)
+    except Exception as e:
+        logger.error("Ошибка сохранения 'О себе' от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения.")
         return
 

@@ -32,6 +32,8 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
+    logger.info("Пользователь %s начал редактирование параметра группы: %s", user_id, param)  # <-- LOG
+
     # 1. Удаляем инлайн-клавиатуру из сообщения, по которому был клик
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
@@ -71,14 +73,18 @@ async def process_new_band_name(message: types.Message, state: FSMContext):
     data = await state.get_data()
     user_id = data.get("user_id")
 
+    logger.info("Пользователь %s вводит новое название группы: %s", user_id, new_name)  # <-- LOG
+
     if len(new_name) > 100:
+        logger.warning("Пользователь %s ввел слишком длинное название группы.", user_id)  # <-- LOG
         await message.answer("⚠️ Название слишком длинное (макс. 100 символов). Введите короче.")
         return
 
     try:
         await update_band_name(user_id, new_name)
+        logger.info("Название группы пользователя %s успешно обновлено на: %s", user_id, new_name)  # <-- LOG
     except Exception as e:
-        logger.error(f"Ошибка обновления названия группы: {e}")
+        logger.error("Ошибка обновления названия группы для %s: %s", user_id, e)  # <-- LOG
         await message.answer("⚠️ Ошибка при сохранении.")
         return
 
@@ -97,14 +103,18 @@ async def process_new_band_year(message: types.Message, state: FSMContext):
 
     current_year = datetime.datetime.now().year
 
+    logger.info("Пользователь %s вводит новый год основания: %s", user_id, year_text)  # <-- LOG
+
     if not year_text.isdigit() or int(year_text) < 1900 or int(year_text) > current_year:
+        logger.warning("Пользователь %s ввел невалидный год основания: %s", user_id, year_text)  # <-- LOG
         await message.answer(f"⚠️ Неверный формат. Введите год цифрами от 1900 до {current_year}.")
         return
 
     try:
         await update_band_year(user_id, year_text)
+        logger.info("Год основания группы пользователя %s успешно обновлен на: %s", user_id, year_text)  # <-- LOG
     except Exception as e:
-        logger.error(f"Ошибка обновления года группы: {e}")
+        logger.error("Ошибка обновления года группы для %s: %s", user_id, e)  # <-- LOG
         await message.answer("⚠️ Ошибка при сохранении.")
         return
 
@@ -121,6 +131,8 @@ async def back_from_band_name_input(callback: types.CallbackQuery, state: FSMCon
     await callback.answer("Редактирование названия отменено.")
     data = await state.get_data()
     user_id = data.get("user_id")
+
+    logger.info("Пользователь %s отменил редактирование названия группы.", user_id)  # <-- LOG
 
     await state.set_state(ProfileStates.select_param_to_fill)
 
@@ -139,6 +151,8 @@ async def back_from_band_year_input(callback: types.CallbackQuery, state: FSMCon
     data = await state.get_data()
     user_id = data.get("user_id")
 
+    logger.info("Пользователь %s отменил редактирование года основания группы.", user_id)  # <-- LOG
+
     await state.set_state(ProfileStates.select_param_to_fill)
 
     await send_band_profile(
@@ -153,16 +167,16 @@ async def back_from_band_year_input(callback: types.CallbackQuery, state: FSMCon
 @router.callback_query(F.data == "edit_band_genres")
 async def start_editing_band_genres(callback: types.CallbackQuery, state: FSMContext):
     """Инициализирует FSMContext текущими жанрами группы и запускает выбор."""
-    logger.info("Пользователь %s начал редактирование жанров группы", callback.from_user.id)
-
     user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование жанров группы", user_id)  # <-- LOG
+
     await callback.answer("Загрузка жанров...")
 
     try:
         band_data = await get_band_data_by_user_id(user_id)
         current_genres = band_data.get("genres") if isinstance(band_data, dict) else []
     except Exception as e:
-        logger.error(f"Ошибка при загрузке данных группы: {e}")
+        logger.error("Ошибка при загрузке данных группы для %s: %s", user_id, e)  # <-- LOG
         await callback.message.answer("⚠️ Произошла ошибка при получении данных группы.")
         return
 
@@ -171,7 +185,8 @@ async def start_editing_band_genres(callback: types.CallbackQuery, state: FSMCon
     selected_genres = [g for g in current_genres if g in standard_options]
     own_genres = [g for g in current_genres if g not in standard_options]
 
-    await state.update_data(user_choice_genre=selected_genres, own_user_genre=own_genres)
+    await state.update_data(user_choice_genre=selected_genres, own_user_genre=own_genres,
+                            user_id=user_id)  # Добавлено user_id
 
     markup = make_keyboard_for_band_genre(selected_genres)
 
@@ -187,7 +202,8 @@ async def start_editing_band_genres(callback: types.CallbackQuery, state: FSMCon
 @router.callback_query(F.data.startswith("genre_"), BandEditingStates.editing_genres)
 async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
     """Обработка клавиатуры для жанров группы."""
-    logger.info("Пользователь %s выбрал жанр для группы: %s", callback.from_user.id, callback.data)
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s выбрал жанр для группы: %s", user_id, callback.data)  # <-- LOG
 
     await callback.answer()
     choose = callback.data.split("_")[1]
@@ -195,6 +211,7 @@ async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
     user_choice = data.get("user_choice_genre", [])
 
     if choose == "Свой вариант":
+        logger.info("Пользователь %s выбрал ввод собственного жанра при редактировании", user_id)  # <-- LOG
         back_button = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_band_genres")]])
 
@@ -221,7 +238,8 @@ async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
 @router.message(F.text, BandEditingStates.inputting_own_genre)
 async def own_band_genre(message: types.Message, state: FSMContext):
     """Обработка собственного жанра для группы. Сохраняем и возвращаемся к выбору."""
-    logger.info("Пользователь %s ввел собственный жанр для группы: %s", message.from_user.id, message.text)
+    user_id = message.from_user.id
+    logger.info("Пользователь %s ввел собственный жанр для группы: %s", user_id, message.text)  # <-- LOG
 
     new_genre = message.text.strip()
     data = await state.get_data()
@@ -229,6 +247,8 @@ async def own_band_genre(message: types.Message, state: FSMContext):
     user_choice = data.get("user_choice_genre", [])
 
     if new_genre.startswith('/'):
+        logger.warning("Пользователь %s ввел собственный жанр, начинающийся с команды: %s", user_id,
+                       new_genre)  # <-- LOG
         await message.answer("⚠️ Название жанра не может начинаться с '/'.\n<b>Напишите жанр:</b>", parse_mode="HTML")
         return
 
@@ -247,7 +267,8 @@ async def own_band_genre(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "done_editing_band_genres")
 async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
     """Обработка кнопки готово для жанров группы. Сохранение и возврат в профиль."""
-    logger.info("Пользователь %s завершил выбор жанров группы", callback.from_user.id)
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s завершил выбор жанров группы", user_id)  # <-- LOG
 
     await callback.answer()
     data = await state.get_data()
@@ -258,14 +279,15 @@ async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
 
     if not all_genres_user:
+        logger.warning("Пользователь %s попытался сохранить пустой список жанров.", user_id)  # <-- LOG
         await callback.answer("⚠️ Пожалуйста, выберите хотя бы один жанр.", show_alert=True)
         return
 
     try:
         await update_band_genres(user_id, all_genres_user)
-        logger.info("Жанры группы пользователя %s успешно обновлены в БД", user_id)
+        logger.info("Жанры группы пользователя %s успешно обновлены в БД", user_id)  # <-- LOG
     except Exception as e:
-        logger.error("Ошибка при сохранении жанров группы пользователя %s: %s", user_id, e)
+        logger.error("Ошибка при сохранении жанров группы пользователя %s: %s", user_id, e)  # <-- LOG
         await state.clear()
         await send_band_profile(callback, user_id,
                                 success_message="⚠️ Произошла ошибка при сохранении жанров. Попробуйте позже.")
@@ -348,11 +370,14 @@ async def start_editing_city(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     await callback.answer("Редактирование города...")
 
+    logger.info("Пользователь %s начал редактирование города группы", user_id)  # <-- LOG
+
     # Загружаем текущий город для подсветки
     try:
         band_data = await get_band_data_by_user_id(user_id)
         current_city = band_data.get("city") if isinstance(band_data.get("city"), str) else None
-    except Exception:
+    except Exception as e:
+        logger.error("Ошибка при загрузке данных группы для %s: %s", user_id, e)  # <-- LOG
         current_city = None
 
     await state.update_data(user_id=user_id, city=current_city)
@@ -374,6 +399,7 @@ async def process_edited_city(callback: types.CallbackQuery, state: FSMContext):
     user_id = data.get("user_id")
 
     if city == 'Свой вариант':
+        logger.info("Пользователь %s выбрал ввод собственного города при редактировании", user_id)  # <-- LOG
         back_markup = InlineKeyboardMarkup(
             inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад к выбору", callback_data="back_to_city_editing")]])
 
@@ -387,6 +413,7 @@ async def process_edited_city(callback: types.CallbackQuery, state: FSMContext):
 
     # Сохраняем и обновляем
     await update_band_city(user_id, city)
+    logger.info("Город группы пользователя %s успешно обновлен на: %s", user_id, city)  # <-- LOG
     await state.clear()
 
     success_msg = f"✅ Город группы успешно обновлен на: <b>{html.escape(city)}</b>"
@@ -400,11 +427,16 @@ async def process_edited_own_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
     user_id = data.get("user_id")
 
+    logger.info("Пользователь %s вводит собственный город: %s", user_id, new_city)  # <-- LOG
+
     if new_city.startswith('/'):
+        logger.warning("Пользователь %s ввел собственный город, начинающийся с команды: %s", user_id,
+                       new_city)  # <-- LOG
         await message.answer("⚠️ Название города не может начинаться с '/'. Введите корректное название.")
         return
 
     await update_band_city(user_id, new_city)
+    logger.info("Город группы пользователя %s успешно обновлен на собственный: %s", user_id, new_city)  # <-- LOG
     await state.clear()
 
     success_msg = f"✅ Город группы успешно обновлен на: <b>{html.escape(new_city)}</b>"
@@ -416,6 +448,9 @@ async def process_edited_own_city(message: types.Message, state: FSMContext):
 async def back_to_city_selection_editing(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
     current_city = data.get("city")
+
+    logger.info("Пользователь %s вернулся к выбору города из ввода собственного варианта",
+                callback.from_user.id)  # <-- LOG
 
     await callback.message.edit_text(
         "🏙 <b>Выберите новый город для вашей группы:</b>",
@@ -431,6 +466,8 @@ async def start_editing_description(callback: types.CallbackQuery, state: FSMCon
     """Начинает редактирование описания."""
     user_id = callback.from_user.id
     await callback.answer()
+
+    logger.info("Пользователь %s начал редактирование описания группы", user_id)  # <-- LOG
 
     await state.update_data(user_id=user_id)
 
@@ -454,14 +491,18 @@ async def process_edited_description(message: types.Message, state: FSMContext):
     data = await state.get_data()
     user_id = data.get("user_id")
 
+    logger.info("Пользователь %s вводит новое описание группы. Длина: %d", user_id, len(new_description))  # <-- LOG
+
     if len(new_description) > 1024:
+        logger.warning("Пользователь %s ввел слишком длинное описание", user_id)  # <-- LOG
         await message.answer("⚠️ Описание слишком длинное. Введите короче.")
         return
 
     try:
         await update_band_description(user_id, new_description)
+        logger.info("Описание группы пользователя %s успешно обновлено.", user_id)  # <-- LOG
     except Exception as e:
-        logger.error(f"Ошибка сохранения описания группы: {e}")
+        logger.error("Ошибка сохранения описания группы для %s: %s", user_id, e)  # <-- LOG
         await message.answer("⚠️ Ошибка при сохранении.")
         return
 
@@ -477,6 +518,8 @@ async def delete_band_description(callback: types.CallbackQuery, state: FSMConte
     await callback.answer("Описание удалено.")
     data = await state.get_data()
     user_id = data.get("user_id")
+
+    logger.info("Пользователь %s удалил описание группы", user_id)  # <-- LOG
 
     await update_band_description(user_id, None)
     await state.clear()
@@ -503,6 +546,8 @@ async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     await callback.answer("Редактирование уровня...")
 
+    logger.info("Пользователь %s начал редактирование уровня серьезности группы", user_id)  # <-- LOG
+
     await state.update_data(user_id=user_id)
 
     await callback.message.edit_text(
@@ -520,13 +565,18 @@ async def process_edited_level(callback: types.CallbackQuery, state: FSMContext)
     data = await state.get_data()
     user_id = data.get("user_id")
 
+    logger.info("Пользователь %s выбрал новый уровень серьезности: %s", user_id, level_key)  # <-- LOG
+
     try:
         selected_level = SeriousnessLevel[level_key]
     except KeyError:
+        logger.error("Пользователь %s выбрал неверный уровень серьезности: %s", user_id, level_key)  # <-- LOG
         await callback.answer("⚠️ Неверный выбор уровня.")
         return
 
     await update_band_seriousness_level(user_id, selected_level.value)
+    logger.info("Уровень серьезности группы пользователя %s успешно обновлен на: %s", user_id,
+                selected_level.value)  # <-- LOG
     await state.clear()
 
     success_msg = f"✅ Уровень серьезности успешно обновлен на: <b>{html.escape(selected_level.value)}</b>"

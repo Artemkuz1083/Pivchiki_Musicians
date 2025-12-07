@@ -37,7 +37,8 @@ def rating_to_stars(level: int) -> str:
 # старт просмотр анкет, если пользователь не зарегистрирован
 @router.callback_query(F.data == "show_without_registration")
 async def start_show_unregistered_user(callback: types.CallbackQuery, state: FSMContext):
-    logger.info("Пользователь начал просмотр анкет без регистрации")
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s начал просмотр анкет без регистрации", user_id)
 
     msg = "<b>Выберите, что вы хотите смотреть:</b> 👇"
 
@@ -50,7 +51,8 @@ async def start_show_unregistered_user(callback: types.CallbackQuery, state: FSM
 # старт просмотр анкет, если пользователь зарегистрирован (Callback)
 @router.callback_query(F.data == "show_with_registration")
 async def start_show_registered_user_callback(callback: types.CallbackQuery, state: FSMContext):
-    logger.info("Пользователь начал просмотр анкет c регистрацией")
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s начал просмотр анкет c регистрацией", user_id)
 
     msg = "<b>Выберите, что вы хотите смотреть:</b> 👇"
 
@@ -63,7 +65,8 @@ async def start_show_registered_user_callback(callback: types.CallbackQuery, sta
 # старт просмотр анкет, если пользователь зарегистрирован (Message)
 @router.message(F.text.startswith("🔍 Смотреть анкеты"))
 async def start_show_registered_user_message(message: types.Message, state: FSMContext):
-    logger.info("Пользователь начал просмотр анкет c регистрацией")
+    user_id = message.from_user.id
+    logger.info("Пользователь ID=%s начал просмотр анкет c регистрацией", user_id)
 
     msg = "<b>Выберите, что вы хотите смотреть:</b> 👇"
 
@@ -81,12 +84,12 @@ async def choose_user(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(user_id=user_id, current_target_id=None, current_target_type=None)
 
     if choose == "bands":
-        logger.info("Пользователь выбрал просмотр групп")
+        logger.info("Пользователь ID=%s выбрал просмотр групп", user_id)
         await state.set_state(ShowProfiles.show_bands)
         await show_bands(callback.message, state)
 
     if choose == "artist":
-        logger.info("Пользователь выбрал просмотр соло артистов")
+        logger.info("Пользователь ID=%s выбрал просмотр соло артистов", user_id)
         await state.set_state(ShowProfiles.show_profiles)
         await show_profiles(callback.message, state)
 
@@ -101,6 +104,8 @@ async def show_bands(message: types.Message, state: FSMContext):
     markup: types.ReplyKeyboardMarkup
 
     user_id = data.get("user_id")
+    # Логируем начало процесса
+    logger.info("Пользователь ID=%s нажал кнопку 'Следующая анкета' (группы)", user_id)
 
     prev_target_id = data.get("current_target_id")
     prev_target_type = data.get("current_target_type")
@@ -108,21 +113,22 @@ async def show_bands(message: types.Message, state: FSMContext):
     if prev_target_id and prev_target_type == "group" and registered:
         try:
             await save_group_interaction(user_id, prev_target_id, Actions.SKIP)
-            logger.info(f"Записан автоматический SKIP: user {user_id} -> group {prev_target_id}")
+            logger.info("Записан автоматический SKIP: user ID=%s -> group ID=%s", user_id, prev_target_id)
         except Exception as e:
-            logger.error(f"Ошибка при записи SKIP: {e}")
+            logger.error("Ошибка у пользователя ID=%s при записи SKIP: %s", user_id, e)
 
     profile_msg = ""
 
     try:
-        logger.info("Пробуем получить данные о группе")
+        logger.info("Пользователь ID=%s пробует получить данные о группе", user_id)
         band = await get_random_group() if not registered else await get_band_which_not_action(user_id)
         if not band:
             await message.answer("🏁 <b>Анкеты групп закончились!</b> Попробуйте позже.")
             await state.update_data(current_target_id=None, current_target_type=None)
+            logger.info("Для пользователя ID=%s анкеты групп закончились", user_id)
             return
     except Exception as e:
-        logger.exception("Не получилось получить данные о группе")
+        logger.exception("Не получилось получить данные у пользователя ID=%s о группе", user_id)
 
     await state.update_data(current_target_id=band.id, current_target_type="group")
 
@@ -171,9 +177,9 @@ async def show_bands(message: types.Message, state: FSMContext):
 # показывает анкеты пользователей
 @router.message(F.text.startswith("Следующая анкета"), ShowProfiles.show_profiles)
 async def show_profiles(message: types.Message, state: FSMContext):
-    logger.info("Пользователь нажал кнопку Следующая анкета")
     data = await state.get_data()
     user_id = data.get("user_id")
+    logger.info("Пользователь ID=%s нажал кнопку Следующая анкета (соло)", user_id)
     registered = data.get("registered")
 
     filters = data.get("filters")
@@ -187,18 +193,18 @@ async def show_profiles(message: types.Message, state: FSMContext):
     if prev_target_id and prev_target_type == "user" and registered:
         try:
             await save_user_interaction(user_id, prev_target_id, Actions.SKIP)
-            logger.info(f"Записан автоматический SKIP: user {user_id} -> user {prev_target_id}")
+            logger.info("Записан автоматический SKIP: swiper ID=%s -> target ID=%s", user_id, prev_target_id)
         except Exception as e:
-            logger.error(f"Ошибка при записи SKIP: {e}")
+            logger.error("Ошибка у пользователя ID=%s при записи SKIP: %s", user_id, e)
 
     profile_msg = ""
 
     try:
         if not registered:
-            logger.info("Гость: ищем рандомный профиль БЕЗ фильтров")
+            logger.info("Гость ID=%s: ищем рандомный профиль БЕЗ фильтров", user_id)
             user = await get_random_profile(swiper_id=user_id, filters=None)
         else:
-            logger.info(f"Регистрация есть: ищем профиль С фильтрами: {filters}")
+            logger.info("Регистрация есть: ищем профиль С фильтрами: %s у пользователя ID=%s", filters, user_id)
             user = await get_random_profile(swiper_id=user_id, filters=filters)
 
         if not user:
@@ -207,14 +213,16 @@ async def show_profiles(message: types.Message, state: FSMContext):
                     "🕵️‍♂️ <b>По вашим фильтрам анкеты не найдены 😔</b>\n"
                     "Попробуйте изменить параметры (Город, Жанры и т.д.)."
                 )
+                logger.info("Пользователю ID=%s не найдены анкеты по фильтрам: %s", user_id, filters)
             else:
                 await message.answer("🏁 <b>Анкеты пользователей закончились!</b> Попробуйте позже.")
+                logger.info("Для пользователя ID=%s анкеты пользователей закончились", user_id)
 
             await state.update_data(current_target_id=None, current_target_type=None)
             return
 
     except Exception as e:
-        logger.exception("Ошибка при получении анкеты")
+        logger.exception("Ошибка у пользователя ID=%s при получении анкеты", user_id)
         return
 
     await state.update_data(current_target_id=user.id, current_target_type="user")
@@ -280,14 +288,16 @@ async def show_profiles(message: types.Message, state: FSMContext):
         if user.photo_path:
             try:
                 await bot.send_photo(chat_id, photo=user.photo_path, caption="📸 <b>Фото профиля:</b>")
+                logger.info("Пользователю ID=%s отправлено фото профиля ID=%s", user_id, user.id)
             except Exception as e:
-                logger.error("Ошибка отправки фото: %s", e)
+                logger.error("Ошибка отправки фото для пользователя ID=%s: %s", user_id, e)
 
         if user.audio_path:
             try:
                 await bot.send_audio(chat_id, audio=user.audio_path, caption="🎧 <b>Демо-трек:</b>")
+                logger.info("Пользователю ID=%s отправлено аудио профиля ID=%s", user_id, user.id)
             except Exception as e:
-                logger.error("Ошибка отправки аудио: %s", e)
+                logger.error("Ошибка отправки аудио для пользователя ID=%s: %s", user_id, e)
 
     await message.answer(text=profile_msg, reply_markup=markup)
 
@@ -296,6 +306,8 @@ async def show_profiles(message: types.Message, state: FSMContext):
 @router.message(F.text.startswith("Вернуться на главную"), ShowProfiles.show_bands)
 @router.message(F.text.startswith("Вернуться на главную"), ShowProfiles.show_profiles)
 async def back_to_main_menu(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    logger.info("Пользователь ID=%s вернулся в главное меню", user_id)
     await start(message, state)
 
 
@@ -303,7 +315,8 @@ async def back_to_main_menu(message: types.Message, state: FSMContext):
 @router.message(F.text.startswith("Подробнее"), ShowProfiles.show_bands)
 @router.message(F.text.startswith("Подробнее"), ShowProfiles.show_profiles)
 async def info(message: types.Message, state: FSMContext):
-    logger.info("Пользователь нажал кнопку подробнее")
+    user_id = message.from_user.id
+    logger.info("Пользователь ID=%s нажал кнопку 'Подробнее'", user_id)
     data = await state.get_data()
     registered = data.get("registered")
     if registered:
@@ -330,7 +343,10 @@ async def like(message: types.Message, state: FSMContext):
     target_id = data.get("current_target_id")
     target_type = data.get("current_target_type")
 
+    logger.info("Пользователь ID=%s ставит LIKE на %s ID=%s", user_id, target_type, target_id)
+
     if not user_id or not target_id:
+        logger.warning("Пользователь ID=%s попытался поставить лайк, но target_id не найден", message.from_user.id)
         return await message.answer("⚠️ Не удалось определить текущую анкету. Нажмите 'Следующая анкета'.")
 
     if target_type == "user":
@@ -349,7 +365,8 @@ async def like(message: types.Message, state: FSMContext):
 # открытие меню фильтров
 @router.message(F.text == "Фильтр 🔍", ShowProfiles.show_profiles)
 async def open_filter_menu(message: types.Message, state: FSMContext):
-    logger.info("Пользователь открыл меню фильтров")
+    user_id = message.from_user.id
+    logger.info("Пользователь ID=%s открыл меню фильтров", user_id)
     data = await state.get_data()
 
     # Сохраняем текущее состояние просмотра, чтобы потом вернуться
@@ -369,6 +386,7 @@ async def open_filter_menu(message: types.Message, state: FSMContext):
 # возврат из меню фильтров
 @router.callback_query(F.data == "back_from_filters", ShowProfiles.filter_menu)
 async def back_to_showing(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     # Восстанавливаем предыдущее состояние просмотра
     previous_state = data.get('previous_show_state', ShowProfiles.show_profiles)
@@ -380,11 +398,13 @@ async def back_to_showing(callback: types.CallbackQuery, state: FSMContext):
         "✅ <b>Настройки фильтров применены.</b>",
         reply_markup=show_reply_keyboard_for_registered_users()
     )
+    logger.info("Пользователь ID=%s вернулся к просмотру, фильтры применены", user_id)
     await callback.answer("Фильтры сохранены!")
 
 
 @router.callback_query(F.data == "reset_all_filters", ShowProfiles.filter_menu)
 async def reset_all_filters_handler(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     # Очищаем фильтры в машине состояний
     await state.update_data(filters={})
 
@@ -393,11 +413,14 @@ async def reset_all_filters_handler(callback: types.CallbackQuery, state: FSMCon
         "🧹 <b>Все фильтры сброшены.</b> Вы будете видеть все анкеты.",
         reply_markup=get_filter_menu_keyboard({})  # Передаем пустой словарь
     )
+    logger.info("Пользователь ID=%s сбросил все фильтры", user_id)
     await callback.answer("Фильтры полностью сброшены!")
 
 
 @router.callback_query(F.data == "set_filter_instruments", ShowProfiles.filter_menu)
 async def start_set_instruments_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра инструментов", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
     selected = filters.get('instruments', [])
@@ -415,15 +438,20 @@ async def start_set_instruments_filter(callback: types.CallbackQuery, state: FSM
 
 @router.callback_query(F.data.startswith("filter_inst_"), ShowProfiles.filter_instruments)
 async def toggle_instrument_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     instrument_name = callback.data.split("filter_inst_")[1]
     data = await state.get_data()
     filters = data.get('filters', {})
     selected_instruments = filters.get('instruments', [])
 
+    action = "добавил"
     if instrument_name in selected_instruments:
         selected_instruments.remove(instrument_name)
+        action = "удалил"
     else:
         selected_instruments.append(instrument_name)
+
+    logger.info("Пользователь ID=%s %s инструмент '%s' в фильтр", user_id, action, instrument_name)
 
     filters['instruments'] = selected_instruments
     await state.update_data(filters=filters)
@@ -438,6 +466,8 @@ async def toggle_instrument_filter(callback: types.CallbackQuery, state: FSMCont
 
 @router.callback_query(F.data == "filter_inst_custom", ShowProfiles.filter_instruments)
 async def prompt_custom_instrument(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s запросил ввод кастомного инструмента для фильтра", user_id)
     await callback.message.edit_text("📝 <b>Введите название инструмента</b>, которое вы хотите добавить в фильтр:")
     await state.set_state(ShowProfiles.filter_instruments_custom)
     await callback.answer()
@@ -445,9 +475,11 @@ async def prompt_custom_instrument(callback: types.CallbackQuery, state: FSMCont
 
 @router.message(ShowProfiles.filter_instruments_custom)
 async def save_custom_instrument_filter(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
     new_instrument = message.text.strip()
 
     if not new_instrument:
+        logger.warning("Пользователь ID=%s ввел пустое название инструмента для фильтра", user_id)
         await message.answer("⚠️ Пожалуйста, введите название инструмента.")
         return
 
@@ -459,6 +491,9 @@ async def save_custom_instrument_filter(message: types.Message, state: FSMContex
         selected_instruments.append(new_instrument)
         filters['instruments'] = selected_instruments
         await state.update_data(filters=filters)
+        logger.info("Пользователь ID=%s добавил кастомный инструмент '%s' в фильтр", user_id, new_instrument)
+    else:
+        logger.info("Пользователь ID=%s повторно ввел существующий инструмент '%s'", user_id, new_instrument)
 
     keyboard = make_instrument_filter_keyboard(selected_instruments)
     await message.answer(
@@ -470,8 +505,12 @@ async def save_custom_instrument_filter(message: types.Message, state: FSMContex
 
 @router.callback_query(F.data == "done_filter_instruments", ShowProfiles.filter_instruments)
 async def done_instrument_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
+
+    instruments_count = len(filters.get('instruments', []))
+    logger.info("Пользователь ID=%s сохранил фильтр инструментов (всего %d)", user_id, instruments_count)
 
     await callback.message.edit_text(
         "⚙️ <b>Настройка фильтров.</b> Ваши текущие параметры:",
@@ -483,6 +522,8 @@ async def done_instrument_filter(callback: types.CallbackQuery, state: FSMContex
 
 @router.callback_query(F.data == "set_filter_city", ShowProfiles.filter_menu)
 async def start_set_city_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра городов", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
     selected = filters.get('cities', [])
@@ -500,6 +541,7 @@ async def start_set_city_filter(callback: types.CallbackQuery, state: FSMContext
 
 @router.callback_query(F.data.startswith("filter_city_"), ShowProfiles.filter_city)
 async def toggle_city_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     if callback.data == "filter_city_custom_prompt":
         return
 
@@ -509,10 +551,14 @@ async def toggle_city_filter(callback: types.CallbackQuery, state: FSMContext):
     filters = data.get('filters', {})
     selected_cities = filters.get('cities', [])
 
+    action = "добавил"
     if city_name in selected_cities:
         selected_cities.remove(city_name)
+        action = "удалил"
     else:
         selected_cities.append(city_name)
+
+    logger.info("Пользователь ID=%s %s город '%s' в фильтр", user_id, action, city_name)
 
     filters['cities'] = selected_cities
     await state.update_data(filters=filters)
@@ -527,6 +573,8 @@ async def toggle_city_filter(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "filter_city_custom_prompt", ShowProfiles.filter_city)
 async def prompt_custom_city(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s запросил ввод кастомного города для фильтра", user_id)
     await callback.message.edit_text("📝 <b>Введите название города</b>, которое вы хотите добавить в фильтр:")
     await state.set_state(ShowProfiles.filter_city_custom)
     await callback.answer()
@@ -534,9 +582,11 @@ async def prompt_custom_city(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(ShowProfiles.filter_city_custom)
 async def save_custom_city_filter(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
     new_city = message.text.strip()
 
     if not new_city:
+        logger.warning("Пользователь ID=%s ввел пустое название города для фильтра", user_id)
         await message.answer("⚠️ Пожалуйста, введите название города.")
         return
 
@@ -548,6 +598,9 @@ async def save_custom_city_filter(message: types.Message, state: FSMContext):
         selected_cities.append(new_city)
         filters['cities'] = selected_cities
         await state.update_data(filters=filters)
+        logger.info("Пользователь ID=%s добавил кастомный город '%s' в фильтр", user_id, new_city)
+    else:
+        logger.info("Пользователь ID=%s повторно ввел существующий город '%s'", user_id, new_city)
 
     keyboard = make_city_filter_keyboard(selected_cities)
     await message.answer(
@@ -559,8 +612,12 @@ async def save_custom_city_filter(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "done_filter_city", ShowProfiles.filter_city)
 async def done_city_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
+
+    cities_count = len(filters.get('cities', []))
+    logger.info("Пользователь ID=%s сохранил фильтр городов (всего %d)", user_id, cities_count)
 
     await callback.message.edit_text(
         "⚙️ <b>Настройка фильтров.</b> Ваши текущие параметры:",
@@ -572,6 +629,8 @@ async def done_city_filter(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "set_filter_genres", ShowProfiles.filter_menu)
 async def start_set_genres_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра жанров", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
     selected = filters.get('genres', [])
@@ -589,6 +648,7 @@ async def start_set_genres_filter(callback: types.CallbackQuery, state: FSMConte
 
 @router.callback_query(F.data.startswith("filter_genre_"), ShowProfiles.filter_genres)
 async def toggle_genre_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     if callback.data == "filter_genre_custom_prompt":
         return
 
@@ -598,10 +658,14 @@ async def toggle_genre_filter(callback: types.CallbackQuery, state: FSMContext):
     filters = data.get('filters', {})
     selected_genres = filters.get('genres', [])
 
+    action = "добавил"
     if genre_name in selected_genres:
         selected_genres.remove(genre_name)
+        action = "удалил"
     else:
         selected_genres.append(genre_name)
+
+    logger.info("Пользователь ID=%s %s жанр '%s' в фильтр", user_id, action, genre_name)
 
     filters['genres'] = selected_genres
     await state.update_data(filters=filters)
@@ -616,6 +680,8 @@ async def toggle_genre_filter(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "filter_genre_custom_prompt", ShowProfiles.filter_genres)
 async def prompt_custom_genre(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s запросил ввод кастомного жанра для фильтра", user_id)
     await callback.message.edit_text("📝 <b>Введите название жанра</b>, которое вы хотите добавить в фильтр:")
     await state.set_state(ShowProfiles.filter_genres_custom)
     await callback.answer()
@@ -623,9 +689,11 @@ async def prompt_custom_genre(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(ShowProfiles.filter_genres_custom)
 async def save_custom_genre_filter(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
     new_genre = message.text.strip()
 
     if not new_genre:
+        logger.warning("Пользователь ID=%s ввел пустое название жанра для фильтра", user_id)
         await message.answer("⚠️ Пожалуйста, введите название жанра.")
         return
 
@@ -637,6 +705,9 @@ async def save_custom_genre_filter(message: types.Message, state: FSMContext):
         selected_genres.append(new_genre)
         filters['genres'] = selected_genres
         await state.update_data(filters=filters)
+        logger.info("Пользователь ID=%s добавил кастомный жанр '%s' в фильтр", user_id, new_genre)
+    else:
+        logger.info("Пользователь ID=%s повторно ввел существующий жанр '%s'", user_id, new_genre)
 
     keyboard = make_genre_filter_keyboard(selected_genres)
     await message.answer(
@@ -648,8 +719,12 @@ async def save_custom_genre_filter(message: types.Message, state: FSMContext):
 
 @router.callback_query(F.data == "done_filter_genres", ShowProfiles.filter_genres)
 async def done_genre_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
+
+    genres_count = len(filters.get('genres', []))
+    logger.info("Пользователь ID=%s сохранил фильтр жанров (всего %d)", user_id, genres_count)
 
     await callback.message.edit_text(
         "⚙️ <b>Настройка фильтров.</b> Ваши текущие параметры:",
@@ -661,6 +736,8 @@ async def done_genre_filter(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "set_filter_age", ShowProfiles.filter_menu)
 async def start_set_age_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра возраста", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
     current_mode = filters.get('age_mode', 'all')
@@ -675,6 +752,7 @@ async def start_set_age_filter(callback: types.CallbackQuery, state: FSMContext)
 
 @router.callback_query(F.data.startswith("age_mode_"), ShowProfiles.filter_menu)
 async def set_age_mode(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     mode = callback.data.split("age_mode_")[1]
 
     data = await state.get_data()
@@ -683,8 +761,10 @@ async def set_age_mode(callback: types.CallbackQuery, state: FSMContext):
     if mode == 'all':
         if 'age_mode' in filters:
             del filters['age_mode']
+            logger.info("Пользователь ID=%s сбросил фильтр возраста", user_id)
     else:
         filters['age_mode'] = mode
+        logger.info("Пользователь ID=%s установил фильтр возраста: %s", user_id, mode)
 
     await state.update_data(filters=filters)
 
@@ -694,6 +774,8 @@ async def set_age_mode(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "back_from_age_filter", ShowProfiles.filter_menu)
 async def back_from_age_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s вернулся в меню фильтров из настройки возраста", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
 
@@ -706,6 +788,8 @@ async def back_from_age_filter(callback: types.CallbackQuery, state: FSMContext)
 
 @router.callback_query(F.data == "set_filter_experience", ShowProfiles.filter_menu)
 async def start_set_experience_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра опыта выступлений", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
     selected = filters.get('experience', [])
@@ -723,16 +807,21 @@ async def start_set_experience_filter(callback: types.CallbackQuery, state: FSMC
 
 @router.callback_query(F.data.startswith("filter_exp_"), ShowProfiles.filter_experience)
 async def toggle_experience_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     experience_name = callback.data.split("filter_exp_")[1]
 
     data = await state.get_data()
     filters = data.get('filters', {})
     selected_experiences = filters.get('experience', [])
 
+    action = "добавил"
     if experience_name in selected_experiences:
         selected_experiences.remove(experience_name)
+        action = "удалил"
     else:
         selected_experiences.append(experience_name)
+
+    logger.info("Пользователь ID=%s %s опыт '%s' в фильтр", user_id, action, experience_name)
 
     filters['experience'] = selected_experiences
     await state.update_data(filters=filters)
@@ -747,12 +836,14 @@ async def toggle_experience_filter(callback: types.CallbackQuery, state: FSMCont
 
 @router.callback_query(F.data == "reset_filter_experience", ShowProfiles.filter_experience)
 async def reset_experience_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
 
     if 'experience' in filters:
         del filters['experience']
         await state.update_data(filters=filters)
+        logger.info("Пользователь ID=%s сбросил фильтр опыта выступлений", user_id)
 
     keyboard = make_experience_filter_keyboard([])
 
@@ -764,8 +855,12 @@ async def reset_experience_filter(callback: types.CallbackQuery, state: FSMConte
 
 @router.callback_query(F.data == "done_filter_experience", ShowProfiles.filter_experience)
 async def done_experience_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
+
+    experience_count = len(filters.get('experience', []))
+    logger.info("Пользователь ID=%s сохранил фильтр опыта выступлений (всего %d)", user_id, experience_count)
 
     await callback.message.edit_text(
         "⚙️ <b>Настройка фильтров.</b> Ваши текущие параметры:",
@@ -777,6 +872,7 @@ async def done_experience_filter(callback: types.CallbackQuery, state: FSMContex
 
 @router.callback_query(F.data == "exit_filters_menu", ShowProfiles.filter_menu)
 async def exit_filters_and_show(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     previous_state = data.get('previous_show_state', ShowProfiles.show_profiles)
     await state.set_state(previous_state)
@@ -786,12 +882,15 @@ async def exit_filters_and_show(callback: types.CallbackQuery, state: FSMContext
         "✅ <b>Фильтры применены!</b>\nНажмите «Следующая анкета», чтобы продолжить.",
         reply_markup=show_reply_keyboard_for_registered_users()
     )
+    logger.info("Пользователь ID=%s вышел из меню фильтров и применил их", user_id)
 
     await callback.answer()
 
 
 @router.callback_query(F.data == "set_filter_level", ShowProfiles.filter_menu)
 async def start_set_level_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра теоретических знаний", user_id)
     data = await state.get_data()
     filters = data.get('filters', {})
     current_level = filters.get('min_level')
@@ -809,6 +908,7 @@ async def start_set_level_filter(callback: types.CallbackQuery, state: FSMContex
 
 @router.callback_query(F.data.startswith("level_val_"), ShowProfiles.filter_level)
 async def set_level_value(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     level = int(callback.data.split("_")[2])
 
     data = await state.get_data()
@@ -822,17 +922,20 @@ async def set_level_value(callback: types.CallbackQuery, state: FSMContext):
         reply_markup=get_filter_menu_keyboard(filters)
     )
     await state.set_state(ShowProfiles.filter_menu)
+    logger.info("Пользователь ID=%s установил минимальный уровень знаний: %d", user_id, level)
     await callback.answer(f"Установлен мин. уровень: {level}")
 
 
 @router.callback_query(F.data == "reset_filter_level", ShowProfiles.filter_level)
 async def reset_level_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
 
     if 'min_level' in filters:
         del filters['min_level']
         await state.update_data(filters=filters)
+        logger.info("Пользователь ID=%s сбросил фильтр минимального уровня знаний", user_id)
 
     await callback.message.edit_text(
         "⚙️ <b>Настройка фильтров.</b> Ваши текущие параметры:",
@@ -844,6 +947,7 @@ async def reset_level_filter(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "back_from_level_filter", ShowProfiles.filter_level)
 async def back_from_level_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
     data = await state.get_data()
     filters = data.get('filters', {})
 
@@ -852,9 +956,12 @@ async def back_from_level_filter(callback: types.CallbackQuery, state: FSMContex
         reply_markup=get_filter_menu_keyboard(filters)
     )
     await state.set_state(ShowProfiles.filter_menu)
+    logger.info("Пользователь ID=%s вернулся в меню фильтров из настройки уровня знаний", user_id)
     await callback.answer()
 
 
 @router.message(F.text == "Вернуться на главную")
 async def back_to_main_menu_text(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    logger.info("Пользователь ID=%s нажал кнопку 'Вернуться на главную' (текст)", user_id)
     await start(message, state)
