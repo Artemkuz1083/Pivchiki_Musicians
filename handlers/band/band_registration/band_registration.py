@@ -57,7 +57,7 @@ async def block_commands_during_registration(message: types.Message):
     return
 
 
-@router.message(F.text == "Зарегистрировать группу")
+@router.message(F.text == "🎸 Зарегистрировать группу")
 async def start_group_registration_from_text(message: types.Message, state: FSMContext):
     """Ловит текстовое сообщение 'Зарегистрировать группу' от Reply-клавиатуры."""
     await _start_group_registration_logic(message, state)
