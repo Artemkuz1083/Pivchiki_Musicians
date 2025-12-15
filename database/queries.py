@@ -212,6 +212,17 @@ async def update_user_about_me(user_id: int, about_me_text: str):
             user.about_me = about_me_text
             await session.commit()
 
+async def update_user_contacts(user_id: int, contacts_text: str) -> None:
+    """Обновляет контактные данные пользователя."""
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            update(User)
+            .where(User.id == user_id)
+            .values(contacts=contacts_text)
+        )
+        await session.execute(stmt)
+        await session.commit()
+
 
 async def create_group(group_data: Dict[str, Any]) -> Optional[int]:
     """

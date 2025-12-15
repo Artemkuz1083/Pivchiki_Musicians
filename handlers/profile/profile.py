@@ -10,7 +10,7 @@ from aiogram.fsm.context import FSMContext
 from database.enums import PerformanceExperience
 from database.queries import update_user, update_instrument_level, update_user_experience, update_user_theory_level, \
     save_user_profile_photo, save_user_audio, get_user, update_user_city, update_user_name, update_user_genres, \
-    update_user_instruments, update_user_about_me
+    update_user_instruments, update_user_about_me, update_user_contacts
 from handlers.enums.genres import Genre
 from handlers.enums.instruments import Instruments
 from handlers.profile.profile_keyboards import get_instrument_selection_keyboard, get_experience_selection_keyboard, \
@@ -59,6 +59,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
     name = html.escape(user_obj.name) if user_obj.name else "Не указано"
     city = html.escape(user_obj.city) if user_obj.city else "Не указано"
     age = user_obj.age if user_obj.age else "Не указано"
+    contacts = html.escape(user_obj.contacts) if user_obj.contacts else "Не указано"
 
     knowledge_level = user_obj.theoretical_knowledge_level if user_obj.theoretical_knowledge_level is not None else 0
     stars_knowledge = rating_to_stars(knowledge_level)
@@ -105,6 +106,7 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
         f"🎤 <b>Опыт выступлений:</b> {experience_display}\n\n"
 
         f"{external_link_display}\n\n"
+        f"📞 <b>Контакты:</b> {html.escape(contacts)}\n\n"
 
         f"🎶 <b>Жанры:</b>\n{genres_display}\n\n"
 
@@ -789,6 +791,46 @@ async def process_external_link(message: types.Message, state: FSMContext):
 
     await state.set_state(ProfileStates.select_param_to_fill)
     await send_updated_profile(message, user_id, success_message="Ссылка успешно обновлена!")
+
+
+# начало редактирования контактов
+@router.callback_query(F.data == "edit_contacts")
+async def edit_contacts(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь %s начал редактирование контактов", user_id)
+
+    await callback.message.edit_text(
+        "📞 <b>Введите новые контактные данные</b> (Telegram @username, телефон, email):\n\n",
+        parse_mode="HTML"
+    )
+
+    await state.set_state(ProfileStates.edit_contacts)
+    await callback.answer()
+
+
+# сохранение новых контактов
+@router.message(F.text, ProfileStates.edit_contacts)
+async def save_new_contacts(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    new_contacts = message.text.strip()
+
+    try:
+        await update_user_contacts(user_id, new_contacts)
+        logger.info("Пользователь ID=%s успешно обновил контакты", user_id)
+
+        await state.set_state(None)
+
+        await send_updated_profile(
+            message,
+            user_id,
+            success_message="<b>Ваши контакты успешно обновлены!</b>"
+        )
+
+    except Exception as e:
+        logger.error("Ошибка обновления контактов для пользователя ID=%s: %s", user_id, e)
+        await message.answer("⚠️ Произошла ошибка при сохранении контактов. Попробуйте еще раз.")
+        await state.set_state(None)
+        await send_updated_profile(message, user_id)
 
 
 @router.callback_query(F.data == "edit_genres")

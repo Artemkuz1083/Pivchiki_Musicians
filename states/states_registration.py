@@ -13,5 +13,6 @@ class RegistrationStates(StatesGroup):
     level_theoretical = State()
     genre = State()
     own_genre = State()
+    contacts = State()
     finish = State()
 

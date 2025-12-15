@@ -22,3 +22,4 @@ class ProfileStates(StatesGroup):
     instrument_edit = State()
     level_practice_edit = State()
     filling_about_me = State()
+    edit_contacts = State()

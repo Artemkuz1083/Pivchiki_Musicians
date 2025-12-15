@@ -24,8 +24,22 @@ ALL_CITIES = CITIES_ENUM + CUSTOM_CITIES
 ALL_GENRES = GENRES_ENUM + CUSTOM_GENRES
 ALL_INSTRUMENTS = INSTRUMENTS_ENUM + CUSTOM_INSTRUMENTS
 
+
 def _random_choice_with_custom(enum_list, custom_list, custom_prob=0.3):
     return random.choice(custom_list) if random.random() < custom_prob else random.choice(enum_list)
+
+
+# НОВАЯ ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ для генерации контактов
+def _generate_random_contacts(user_id: int) -> str | None:
+    """Генерирует случайный контакт (Telegram или Email)."""
+    if random.random() < 0.2:  # 20% пользователей без контактов
+        return None
+
+    if random.random() < 0.6:  # 60% шанс на Telegram
+        return f"@{random.choice(['rock', 'jazz', 'band', 'user'])}musician_{user_id}"
+    else:  # 40% шанс на Email
+        return f"testuser_{user_id}@example.com"
+
 
 async def seed_initial_data(session: AsyncSession):
     # Проверяем, есть ли уже пользователи — если да, не сидим
@@ -39,12 +53,15 @@ async def seed_initial_data(session: AsyncSession):
     user_id_counter = 1
     group_id_counter = 1001
 
-
     # --- 2. 10 групп по 2–4 участника ---
     for _ in range(10):
         # Создаём основателя
         founder_city = random.choice(ALL_CITIES)
         founder_genre_names = random.sample(ALL_GENRES, k=random.randint(1, 2))
+
+        # 🔥 ИЗМЕНЕНИЕ 1: Добавляем contacts
+        founder_contacts = _generate_random_contacts(user_id_counter)
+
         founder = User(
             id=user_id_counter,
             city=founder_city,
@@ -53,6 +70,7 @@ async def seed_initial_data(session: AsyncSession):
             theoretical_knowledge_level=random.randint(1, 5) if random.random() > 0.3 else None,
             has_performance_experience=random.choice(PERF_EXP_VALUES) if random.random() > 0.3 else None,
             about_me=f"Основатель группы из {founder_city}" if random.random() > 0.4 else None,
+            contacts=founder_contacts,  # <-- ДОБАВЛЕНО
         )
         for genre_name in founder_genre_names:
             founder.genres.append(UserGenre(name=genre_name))
@@ -90,6 +108,10 @@ async def seed_initial_data(session: AsyncSession):
             member_id = user_id_counter + i + 1
             member_city = group_city
             member_genre_names = random.sample(group_genre_names, k=1)
+
+            # 🔥 ИЗМЕНЕНИЕ 2: Добавляем contacts
+            member_contacts = _generate_random_contacts(member_id)
+
             member = User(
                 id=member_id,
                 city=member_city,
@@ -98,6 +120,7 @@ async def seed_initial_data(session: AsyncSession):
                 theoretical_knowledge_level=random.randint(1, 5) if random.random() > 0.3 else None,
                 has_performance_experience=random.choice(PERF_EXP_VALUES) if random.random() > 0.3 else None,
                 about_me=f"Участник группы из {member_city}" if random.random() > 0.4 else None,
+                contacts=member_contacts,  # <-- ДОБАВЛЕНО
             )
             for genre_name in member_genre_names:
                 member.genres.append(UserGenre(name=genre_name))

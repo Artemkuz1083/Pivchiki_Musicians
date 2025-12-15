@@ -71,6 +71,7 @@ def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="Уровень теории", callback_data="edit_theory"),
         InlineKeyboardButton(text="Демонстрационные файлы", callback_data="edit_files"),
         InlineKeyboardButton(text="Внешняя ссылка", callback_data="edit_link"),
+        InlineKeyboardButton(text="Контакты", callback_data="edit_contacts"),
         InlineKeyboardButton(text="Фото", callback_data="edit_photo"),
         InlineKeyboardButton(text="О себе", callback_data="edit_about_me"),
     )

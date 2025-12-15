@@ -18,6 +18,8 @@ class User(Base):
 
     city: Mapped[str] = mapped_column(String, nullable=True)
 
+    contacts: Mapped[str] = mapped_column(String, nullable=True)
+
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     age: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     theoretical_knowledge_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

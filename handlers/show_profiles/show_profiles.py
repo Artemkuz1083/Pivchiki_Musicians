@@ -133,7 +133,7 @@ async def show_bands(message: types.Message, state: FSMContext):
     await state.update_data(current_target_id=band.id, current_target_type="group")
 
     name = band.name if band.name is not None else "Не указано"
-    year = band.formation_date if band.formation_date is not None else "—"
+    year = band.formation_date if band.formation_date is not None else "Не указано"
     city = band.city if band.city is not None else "Не указано"
     # Безопасное получение списка жанров (исправление потенциальной ошибки оригинала)
     genres_list = band.genres if band.genres is not None else []
@@ -264,6 +264,7 @@ async def show_profiles(message: types.Message, state: FSMContext):
         experience_display = getattr(user.has_performance_experience, 'value', 'Не указано')
         about_me_display = user.about_me if user.about_me else "Не указано"
         external_link_display = user.external_link if user.external_link else "Не указана"
+        contacts_display = user.contacts if user.contacts else "Не указано"
 
         # Если есть ссылка, делаем её кликабельной, иначе оставляем текст
         if external_link_display and external_link_display != "Не указана":
@@ -279,6 +280,7 @@ async def show_profiles(message: types.Message, state: FSMContext):
             f"<i>{about_me_display}</i>\n\n"
             f"🧠 <b>Уровень теоретических знаний:</b> {stars_knowledge}\n"
             f"🎤 <b>Опыт выступлений:</b> {experience_display or 'Не указано'}\n\n"
+            f"📞 <b>Контакты:</b> {contacts_display}\n"
             f"🔗 <b>Внешняя ссылка:</b> {link_html}\n\n"
             f"🎼 <b>Любимые жанры:</b> {genres_display}\n\n"
             f"🎹 <b>Инструменты:</b>\n"
@@ -326,7 +328,7 @@ async def info(message: types.Message, state: FSMContext):
         "Чтобы ставить лайки, надо пройти регистрацию!\n"
         "Также после регистрации вы сможете видеть:\n"
         "✅ Опыт выступлений\n"
-        "✅ Информацию о себе\n"
+        "✅ Информацию о музыкантах и их контактные данные\n"
         "✅ Аудио файлы музыкантов\n"
         "✅ И многое другое!"
     )

@@ -418,7 +418,7 @@ async def own_genre(message: types.Message, state: FSMContext):
     await state.set_state(RegistrationStates.genre)
 
 
-# обработка кнопки "готово" для жанров
+# Она срабатывает, когда пользователь нажал "Готово" в выборе жанров
 @router.callback_query(F.data.startswith("done"), RegistrationStates.genre)
 async def done_genre(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -430,7 +430,6 @@ async def done_genre(callback: types.CallbackQuery, state: FSMContext):
 
     if len(user_choice_genre) == 0 and len(own_user_genre) == 0:
         await callback.answer("⚠️ Выберите хотя бы один жанр!", show_alert=True)
-        logger.warning("Пользователь %s попытался завершить регистрацию без жанров", user_id)
         return
 
     logger.info("Пользователь %s выбрал жанры: %s", user_id, all_genres_user)
@@ -443,9 +442,42 @@ async def done_genre(callback: types.CallbackQuery, state: FSMContext):
         return
 
     msg_text = (
+        "📞 <b>Контакты для связи</b>\n\n"
+        "Пожалуйста, укажите ваши контактные данные (Telegram @username, телефон или email), "
+        "чтобы с вами могли связаться другие музыканты:\n\n"
+    )
+
+    await callback.message.answer(text=msg_text, parse_mode="HTML")
+
+    await state.set_state(RegistrationStates.contacts)
+    await callback.answer()
+
+
+# Она ловит текст, сохраняет его и показывает финальное меню
+@router.message(F.text, RegistrationStates.contacts)
+async def save_contacts(message: types.Message, state: FSMContext):
+    contact_text = message.text.strip()
+    user_id = message.from_user.id
+
+    logger.info("Пытаемся получить контакты пользователя %s", user_id)
+
+    if contact_text.startswith("/"):
+        await message.answer("⚠️ Текст не может начинаться с <code>/</code>.\nВведите контакты:", parse_mode="HTML")
+        return
+
+    try:
+        await update_user(user_id, contacts=contact_text)
+        logger.info("Контакты пользователя %s сохранены: %s", user_id, contact_text)
+    except Exception:
+        logger.exception("Ошибка при сохранении контактов пользователя %s", user_id)
+        await message.answer("Произошла ошибка при сохранении контактов. Попробуйте еще раз.")
+        return
+
+    # --- ФИНАЛ РЕГИСТРАЦИИ ---
+    msg_text = (
         "🎉 <b>Отлично! Регистрация завершена.</b>\n\n"
         "Теперь вам доступен ваш профиль.\n"
-        "💡 <i>Чтобы ваше объявление привлекло больше внимания, рекомендуем дополнить информацию в профиле.</i>"
+        "💡 <i>Чтобы ваше объявление привлекло больше внимания, рекомендуем дополнить информацию в профиле (фото, аудио).</i>"
     )
 
     button = [
@@ -455,6 +487,6 @@ async def done_genre(callback: types.CallbackQuery, state: FSMContext):
     ]
     markup = InlineKeyboardMarkup(inline_keyboard=button)
 
-    await callback.message.answer(text=msg_text, reply_markup=markup, parse_mode="HTML")
-    await callback.answer()
+    await message.answer(text=msg_text, reply_markup=markup, parse_mode="HTML")
+
     await state.clear()
