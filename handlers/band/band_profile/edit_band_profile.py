@@ -32,9 +32,9 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
-    logger.info("Пользователь %s начал редактирование параметра группы: %s", user_id, param)  # <-- LOG
+    logger.info("Пользователь %s начал редактирование параметра группы: %s", user_id, param)
 
-    # 1. Удаляем инлайн-клавиатуру из сообщения, по которому был клик
+    # 1. Пытаемся убрать инлайн-кнопки под профилем, чтобы пользователь не нажал их дважды
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
@@ -42,30 +42,35 @@ async def start_band_editing(callback: types.CallbackQuery, state: FSMContext):
 
     await state.update_data(user_id=user_id)
 
-    # 2. Создаем инлайн-клавиатуру "Назад"
+    # 2. Определяем текст и состояние
     back_markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")]
     ])
 
-    text: str = ""
-
     if param == "name":
         text = "🎸 <b>Введите новое название группы:</b>"
         await state.set_state(BandEditingStates.editing_band_name)
-    elif param == "year":
+    else: # year
         text = "📅 <b>Введите новый год основания (ГГГГ):</b>"
         await state.set_state(BandEditingStates.editing_band_year)
 
-    # 3. Отправляем НОВОЕ сообщение с удалением реплай-клавиатуры
+    # 3. УДАЛЯЕМ старую Reply-клавиатуру (кнопки снизу)
+    # Мы отправляем невидимое сообщение, которое тут же удаляет кнопки
+    remove_msg = await callback.bot.send_message(
+        chat_id=chat_id,
+        text="⏳ Ожидание ввода...",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    # Сразу удаляем это сервисное сообщение, чтобы не засорять чат
+    await remove_msg.delete()
+
+    # 4. Отправляем финальное сообщение с инлайн-кнопкой "Назад"
     await callback.bot.send_message(
         chat_id=chat_id,
         text=text,
         reply_markup=back_markup,
-        parse_mode="HTML",
-        # УДАЛЕНИЕ РЕПЛАЙ-КЛАВИАТУРЫ
-        reply_keyboard=ReplyKeyboardRemove()
+        parse_mode="HTML"
     )
-
 
 @router.message(F.text, BandEditingStates.editing_band_name)
 async def process_new_band_name(message: types.Message, state: FSMContext):
@@ -213,7 +218,7 @@ async def choose_band_genre(callback: types.CallbackQuery, state: FSMContext):
     if choose == "Свой вариант":
         logger.info("Пользователь %s выбрал ввод собственного жанра при редактировании", user_id)  # <-- LOG
         back_button = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="edit_band_genres")]])
+            inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")]])
 
         await callback.message.edit_text(
             text="📝 <b>Напишите жанр для вашей группы:</b>",
@@ -342,7 +347,7 @@ def make_keyboard_for_band_genre(selected: list[str]) -> InlineKeyboardMarkup:
 
     # Добавляем кнопки "Готово" и "Назад" в отдельные строки (одна колонка)
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_editing_band_genres")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_params")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_band_params")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -581,3 +586,29 @@ async def process_edited_level(callback: types.CallbackQuery, state: FSMContext)
 
     success_msg = f"✅ Уровень серьезности успешно обновлен на: <b>{html.escape(selected_level.value)}</b>"
     await send_band_profile(callback, user_id, success_message=success_msg)
+
+
+@router.callback_query(F.data == "back_to_band_params")
+async def universal_back_to_band_profile(callback: types.CallbackQuery, state: FSMContext):
+    """
+    Исправленный универсальный хендлер.
+    Убрали BandEditingStates из аргументов, чтобы не было ошибки TypeError.
+    """
+    user_id = callback.from_user.id
+
+    # Мы можем логгировать текущее состояние перед очисткой
+    current_state = await state.get_state()
+    logger.info("Пользователь %s отменил редактирование (был в %s) и возвращается в профиль группы.", user_id,
+                current_state)
+
+    await callback.answer("Редактирование отменено.")
+
+    # Сбрасываем стейт полностью
+    await state.clear()
+
+    # Отправляем анкету группы
+    await send_band_profile(
+        callback,
+        user_id,
+        success_message="❌ Изменения не сохранены. Вы вернулись в меню группы."
+    )
