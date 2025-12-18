@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from handlers.enums.seriousness_level import SeriousnessLevel
 from .enums import PerformanceExperience, Actions
 from .models import User, Instrument, GroupMember, GroupProfile, UserGenre, GroupGenre, UserLikesUser, UserLikesGroup
 from .session import AsyncSessionLocal
@@ -578,28 +579,66 @@ async def get_profile_which_not_action(swiper_id: int):
         return user
 
 
-async def get_band_which_not_action(swiper_id: int):
-    """Выводим группу, где пользователь не является участников"""
+async def get_band_which_not_action(swiper_id: int, filters: dict = None):
     async with AsyncSessionLocal() as session:
+        # 1. Базовые условия (Группа видима + Юзер не участник)
+        conditions = [
+            GroupProfile.is_visible == True,
+            ~exists().where(
+                (GroupMember.user_id == swiper_id) &
+                (GroupMember.group_id == GroupProfile.id)
+            )
+        ]
+
+        # 2. Исключаем просмотренные
+        viewed_subquery = (
+            select(UserLikesGroup.target_group_id)
+            .where(UserLikesGroup.swiper_user_id == swiper_id)
+        )
+        conditions.append(GroupProfile.id.notin_(viewed_subquery))
+
+        # 3. Применяем фильтры
+        if filters:
+            # --- ФИЛЬТР ПО ГОРОДАМ ---
+            if cities := filters.get('cities'):
+                city_conditions = [GroupProfile.city.ilike(f"%{c.strip()}%") for c in cities if c.strip()]
+                if city_conditions:
+                    conditions.append(or_(*city_conditions))
+
+            # --- ФИЛЬТР ПО ЖАНРАМ ---
+            if genres := filters.get('genres'):
+                genres_exists = (
+                    select(GroupGenre)
+                    .where(GroupGenre.group_id == GroupProfile.id, GroupGenre.name.in_(genres))
+                )
+                conditions.append(exists(genres_exists))
+
+            # --- ФИЛЬТР ПО УРОВНЮ СЕРЬЕЗНОСТИ (ИСПРАВЛЕНО) ---
+            # Используем новый ключ с короткими именами
+            selected_names = filters.get('seriousness_level_names')
+
+            if selected_names and isinstance(selected_names, list):
+                # Конвертируем КОРОТКИЕ ИМЕНА в ДЛИННЫЕ ЗНАЧЕНИЯ для БД
+                target_values = []
+                for name in selected_names:
+                    try:
+                        # Напр: 'HOBBY' -> 'Хобби (редкие репетиции)'
+                        target_values.append(SeriousnessLevel[name.upper()].value)
+                    except (KeyError, ValueError):
+                        continue
+
+                if target_values:
+                    # Это условие оставит только те группы, уровень которых ЕСТЬ в списке.
+                    # Анкеты с NULL или пустым уровнем автоматически НЕ попадут в результат.
+                    conditions.append(GroupProfile.seriousness_level.in_(target_values))
+
+        # 4. Сборка и выполнение
         stmt = (
             select(GroupProfile)
-            .where(GroupProfile.is_visible)
-            .where(
-                ~exists().where(
-                    (GroupMember.user_id == swiper_id) &
-                    (GroupMember.group_id == GroupProfile.id)
-                )
-            )
-            .where(
-                ~exists().where(
-                    (UserLikesGroup.target_group_id == GroupProfile.id) &
-                    (UserLikesGroup.swiper_user_id == swiper_id)
-                )
-            )
+            .where(and_(*conditions))
             .order_by(func.random())
             .limit(1)
         )
 
         result = await session.execute(stmt)
-        user = result.scalars().first()
-        return user
+        return result.scalars().first()

@@ -563,58 +563,74 @@ async def process_new_name(message: types.Message, state: FSMContext):
 
 
 @router.callback_query(F.data == "edit_city")
-async def ask_for_city(callback: types.CallbackQuery, state: FSMContext):
+async def start_city_editing(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    logger.info("Пользователь %s начал редактирование города", user_id)
-    await callback.answer()
+    user_obj = await get_user(user_id)  # Получаем текущего пользователя из БД
+
+    # Извлекаем текущие города из строки в список
+    current_cities = []
+    if user_obj and user_obj.city:
+        current_cities = [c.strip() for c in user_obj.city.split(",") if c.strip()]
+
+    # Сохраняем список в стейт для временного хранения
+    await state.update_data(temp_selected_cities=current_cities)
     await state.set_state(ProfileStates.filling_city)
 
-    await callback.message.answer(
-        "🏙 <b>Выберите ваш город:</b>",
-        reply_markup=make_keyboard_for_city(),
+    await callback.message.edit_text(
+        "🏙 <b>Выберите города, в которых вы готовы играть:</b>\n"
+        "<i>Можно выбрать несколько вариантов.</i>",
+        reply_markup=make_keyboard_for_city(current_cities),
         parse_mode="HTML"
     )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("city_"), ProfileStates.filling_city)
-async def process_new_city(callback: types.CallbackQuery, state: FSMContext):
+async def toggle_city_selection(callback: types.CallbackQuery, state: FSMContext):
     city = callback.data.split("_")[1]
-    user_id = callback.from_user.id
 
-    if city == 'Свой вариант':
-        logger.info("Пользователь %s выбрал ввод собственного города", user_id)
-        await callback.message.edit_text(text="🏙 <b>Напишите название вашего города:</b>", parse_mode="HTML")
+    if city == "own":
+        await callback.message.edit_text("🏙 <b>Введите название города текстом:</b>")
         await state.set_state(ProfileStates.own_city)
         return
 
-    try:
-        await update_user_city(user_id, city)
-        logger.info("Пользователь %s обновил город на: %s", user_id, city)
-    except Exception as e:
-        logger.error("Ошибка сохранения города от %s: %s", user_id, e)
-        return
+    # Получаем текущий временный список
+    data = await state.get_data()
+    selected = data.get("temp_selected_cities", [])
 
-    await state.set_state(ProfileStates.select_param_to_fill)
-    await send_updated_profile(callback, user_id, success_message=f"Город обновлен: <b>{city}</b>")
+    # Переключаем (Toggle): если есть — удаляем, если нет — добавляем
+    if city in selected:
+        selected.remove(city)
+    else:
+        selected.append(city)
+
+    await state.update_data(temp_selected_cities=selected)
+
+    # Обновляем только клавиатуру, не перерисовывая всё сообщение
+    await callback.message.edit_reply_markup(
+        reply_markup=make_keyboard_for_city(selected)
+    )
     await callback.answer()
 
 
-@router.message(ProfileStates.own_city, F.text)
-async def process_new_own_city(message: types.Message, state: FSMContext):
-    user_id = message.from_user.id
-    new_city = message.text.strip()
+@router.callback_query(F.data == "done_cities", ProfileStates.filling_city)
+async def finish_city_editing(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    data = await state.get_data()
+    selected = data.get("temp_selected_cities", [])
 
-    try:
-        await update_user_city(user_id, new_city)
-        logger.info("Пользователь %s ввел собственный город: %s", user_id, new_city)
-    except Exception as e:
-        logger.error("Ошибка сохранения собственного города от %s: %s", user_id, e)
-        await message.answer("⚠️ Ошибка сохранения.")
-        await state.set_state(ProfileStates.select_param_to_fill)
+    if not selected:
+        await callback.answer("⚠️ Выберите хотя бы один город!", show_alert=True)
         return
 
+    # Склеиваем список обратно в строку для БД
+    cities_string = ", ".join(selected)
+
+    await update_user_city(user_id, cities_string)  # Ваша функция обновления БД
+
     await state.set_state(ProfileStates.select_param_to_fill)
-    await send_updated_profile(message, user_id, success_message=f"Город обновлен: <b>{html.escape(new_city)}</b>")
+    await send_updated_profile(callback, user_id, success_message=f"✅ Города обновлены: {cities_string}")
+    await callback.answer()
 
 
 @router.callback_query(F.data == "edit_instruments")

@@ -11,7 +11,8 @@ from database.queries import get_random_profile, get_random_group, save_user_int
 from handlers.show_profiles.show_keyboards import choose_keyboard_for_show, \
     show_reply_keyboard_for_unregistered_users, show_reply_keyboard_for_registered_users, \
     make_instrument_filter_keyboard, make_city_filter_keyboard, make_genre_filter_keyboard, make_age_filter_keyboard, \
-    make_experience_filter_keyboard, make_level_filter_keyboard
+    make_experience_filter_keyboard, make_level_filter_keyboard, get_group_filter_menu_keyboard, \
+    make_seriousness_filter_keyboard
 from handlers.show_profiles.show_keyboards import get_filter_menu_keyboard
 from handlers.start import start
 from main import bot
@@ -107,6 +108,7 @@ async def show_bands(message: types.Message, state: FSMContext):
     # Логируем начало процесса
     logger.info("Пользователь ID=%s нажал кнопку 'Следующая анкета' (группы)", user_id)
 
+    # --- ЛОГИКА SKIP (Пропуск предыдущей анкеты) ---
     prev_target_id = data.get("current_target_id")
     prev_target_type = data.get("current_target_type")
 
@@ -117,30 +119,59 @@ async def show_bands(message: types.Message, state: FSMContext):
         except Exception as e:
             logger.error("Ошибка у пользователя ID=%s при записи SKIP: %s", user_id, e)
 
+    # --- ПОЛУЧЕНИЕ АНКЕТЫ ---
     profile_msg = ""
 
+    # Достаем фильтры именно для групп
+    group_filters = data.get("group_filters", {})
+
     try:
-        logger.info("Пользователь ID=%s пробует получить данные о группе", user_id)
-        band = await get_random_group() if not registered else await get_band_which_not_action(user_id)
+        logger.info("Пользователь ID=%s ищет группу. Фильтры: %s", user_id, group_filters)
+
+        if not registered:
+            # Гости смотрят случайные группы без фильтров
+            band = await get_random_group()
+        else:
+            # Зарегистрированные смотрят с учетом фильтров и исключений
+            band = await get_band_which_not_action(user_id, filters=group_filters)
+
+        # Если группа не найдена
         if not band:
-            await message.answer("🏁 <b>Анкеты групп закончились!</b> Попробуйте позже.")
+            if registered and group_filters:
+                # Если были включены фильтры
+                await message.answer(
+                    "🎸 <b>По вашим фильтрам группы не найдены 😔</b>\n"
+                    "Попробуйте изменить параметры (Город, Жанры, Уровень)."
+                )
+                logger.info("Пользователю ID=%s не найдены группы по фильтрам: %s", user_id, group_filters)
+            else:
+                # Если фильтров нет или это гость
+                await message.answer("🏁 <b>Анкеты групп закончились!</b> Попробуйте позже.")
+                logger.info("Для пользователя ID=%s анкеты групп закончились", user_id)
+
+            # Сбрасываем текущую цель, чтобы не лайкнуть "пустоту"
             await state.update_data(current_target_id=None, current_target_type=None)
-            logger.info("Для пользователя ID=%s анкеты групп закончились", user_id)
             return
+
     except Exception as e:
         logger.exception("Не получилось получить данные у пользователя ID=%s о группе", user_id)
+        await message.answer("Произошла ошибка при загрузке анкеты.")
+        return
 
+    # Запоминаем текущую группу
     await state.update_data(current_target_id=band.id, current_target_type="group")
 
+    # --- ФОРМИРОВАНИЕ ТЕКСТА АНКЕТЫ ---
     name = band.name if band.name is not None else "Не указано"
     year = band.formation_date if band.formation_date is not None else "Не указано"
     city = band.city if band.city is not None else "Не указано"
-    # Безопасное получение списка жанров (исправление потенциальной ошибки оригинала)
-    genres_list = band.genres if band.genres is not None else []
 
+    # Получение списка жанров
+    genres_list = band.genres if band.genres is not None else []
     genre_names = [genre_entity.name for genre_entity in genres_list]
     genres_display = ", ".join(genre_names) if genre_names else "Не указано"
 
+    # Вариант для ГОСТЯ
     if not registered:
         markup = show_reply_keyboard_for_unregistered_users()
         profile_msg = (
@@ -153,26 +184,32 @@ async def show_bands(message: types.Message, state: FSMContext):
             "Больше информации по кнопке «Подробнее»."
         )
 
+    # Вариант для ЗАРЕГИСТРИРОВАННОГО
     if registered:
         markup = show_reply_keyboard_for_registered_users()
         description = band.description if band.description is not None else "Не указано"
-        level = band.seriousness_level if band.seriousness_level is not None else "Не указано"
+
+        # Отображение уровня (если это Enum, берем .value, если строка - оставляем)
+        level_raw = band.seriousness_level
+        if hasattr(level_raw, 'value'):
+            level = level_raw.value
+        else:
+            level = level_raw if level_raw else "Не указано"
 
         profile_msg = (
             f"🎸 <b>Название:</b> {name}\n"
             f"📅 <b>Год основания:</b> {year}\n"
             f"🏙 <b>Город:</b> {city}\n"
             f"📊 <b>Уровень:</b> {level}\n"
-            f"🎼 <b>Жанры:</b> <i>{genre_names}</i>\n"
+            f"🎼 <b>Жанры:</b> <i>{genres_display}</i>\n"
             f"\n"
             f"📝 <b>О себе:</b>\n"
             f"<i>{description}</i>\n"
             f"\n"
-            "👇 <b>Выберите, что хотите изменить:</b>"
+            "👇 <b>Выберите действие:</b>"
         )
 
     await message.answer(text=profile_msg, reply_markup=markup)
-
 
 # показывает анкеты пользователей
 @router.message(F.text.startswith("Следующая анкета"), ShowProfiles.show_profiles)
@@ -967,3 +1004,282 @@ async def back_to_main_menu_text(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     logger.info("Пользователь ID=%s нажал кнопку 'Вернуться на главную' (текст)", user_id)
     await start(message, state)
+
+
+# 1. Открытие меню (работает по кнопке "Фильтр 🔍" когда мы в режиме show_bands)
+@router.message(F.text == "Фильтр 🔍", ShowProfiles.show_bands)
+async def open_group_filter_menu(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    # Берем именно group_filters
+    current_filters = data.get('group_filters', {})
+
+    await message.answer(
+        "⚙️ <b>Настройка фильтров групп.</b>\nЧто ищем?",
+        reply_markup=get_group_filter_menu_keyboard(current_filters)
+    )
+    # Можно использовать то же состояние filter_menu или создать новое
+    # Для чистоты создадим под-состояние (нужно добавить в класс ShowProfiles)
+    # Но чтобы не ломать твой код, используем существующее, но с флагом в callback
+    await state.set_state(ShowProfiles.filter_menu)
+
+
+# 2. Выход из меню фильтров ГРУПП
+@router.callback_query(F.data == "exit_group_filters_menu", ShowProfiles.filter_menu)
+async def exit_group_filters(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(ShowProfiles.show_bands)
+    await callback.message.delete()
+    await callback.message.answer(
+        "✅ <b>Фильтры групп применены!</b>\nЖмите «Следующая анкета».",
+        reply_markup=show_reply_keyboard_for_registered_users()
+    )
+    await callback.answer()
+
+
+# 3. Сброс фильтров
+@router.callback_query(F.data == "reset_group_filters", ShowProfiles.filter_menu)
+async def reset_group_filters(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(group_filters={})
+    await callback.message.edit_text(
+        "🧹 <b>Фильтры групп сброшены.</b>",
+        reply_markup=get_group_filter_menu_keyboard({})
+    )
+    await callback.answer()
+
+
+# 4. Настройка Уровня Серьезности
+@router.callback_query(F.data == "set_group_filter_level", ShowProfiles.filter_menu)
+async def set_group_level(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+
+    # ПРЕДПОЛОЖЕНИЕ: Получаем список коротких имен (names),
+    # а не длинных значений (values)
+    selected_names = filters.get('seriousness_level_names', [])
+
+    await callback.message.edit_text(
+        "📊 <b>Уровень группы</b>\nВыберите подходящие:",
+        # Передаем список коротких имен
+        reply_markup=make_seriousness_filter_keyboard(selected_names)
+    )
+    await state.set_state(ShowProfiles.filter_group_level)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("fgl_"), ShowProfiles.filter_group_level)
+async def toggle_group_level(callback: types.CallbackQuery, state: FSMContext):
+    # level_name = 'hobby', 'pro', etc.
+    level_name = callback.data.split("fgl_")[1].upper()  # <--- Получаем короткое имя в ВЕРХНЕМ РЕГИСТРЕ
+
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+
+    # ⚠️ Изменяем ключ в FSM, чтобы хранить короткие имена.
+    # Это предотвратит путаницу со старыми длинными значениями.
+    selected = filters.get('seriousness_level_names', [])  # Используем новый ключ
+
+    if level_name in selected:
+        selected.remove(level_name)
+    else:
+        selected.append(level_name)
+
+    # Сохраняем короткие имена обратно в FSM
+    filters['seriousness_level_names'] = selected
+    await state.update_data(group_filters=filters)
+
+    with suppress(TelegramBadRequest):
+        await callback.message.edit_reply_markup(
+            # Передаем список коротких имен
+            reply_markup=make_seriousness_filter_keyboard(selected)
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "done_group_filter_level", ShowProfiles.filter_group_level)
+async def done_group_level(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+
+    await callback.message.edit_text(
+        "⚙️ <b>Настройка фильтров групп.</b>",
+        reply_markup=get_group_filter_menu_keyboard(filters)
+    )
+    await state.set_state(ShowProfiles.filter_menu)
+    await callback.answer()
+
+
+# 5. Настройка Городов и Жанров (Повторное использование логики)
+# Мы можем переиспользовать существующие функции make_city_filter_keyboard,
+# но нужно сохранять данные именно в group_filters.
+
+@router.callback_query(F.data == "set_group_filter_city", ShowProfiles.filter_menu)
+async def set_group_city(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+    selected = filters.get('cities', [])
+
+    await callback.message.edit_text(
+        "🏙️ <b>Города поиска групп</b>",
+        reply_markup=make_city_filter_keyboard(selected)  # Переиспользуем твою клавиатуру
+    )
+    # Важно: используем ОТДЕЛЬНОЕ состояние, чтобы хендлер обработки клика понял,
+    # что мы редактируем именно фильтр ГРУПП, а не юзеров.
+    await state.set_state(ShowProfiles.filter_group_city)
+    await callback.answer()
+
+
+# Обработчик клика по городу для ГРУПП
+@router.callback_query(F.data.startswith("filter_city_"), ShowProfiles.filter_group_city)
+async def toggle_group_city(callback: types.CallbackQuery, state: FSMContext):
+    # Логика 1 в 1 как у юзеров, но сохраняем в group_filters
+    city_name = callback.data.split("filter_city_")[1]
+    if city_name == "custom_prompt": return  # Обработка кастома отдельно
+
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+    selected = filters.get('cities', [])
+
+    if city_name in selected:
+        selected.remove(city_name)
+    else:
+        selected.append(city_name)
+
+    filters['cities'] = selected
+    await state.update_data(group_filters=filters)
+
+    with suppress(TelegramBadRequest):
+        await callback.message.edit_reply_markup(
+            reply_markup=make_city_filter_keyboard(selected)
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "done_filter_city", ShowProfiles.filter_group_city)
+async def done_group_city(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+    await callback.message.edit_text(
+        "⚙️ <b>Настройка фильтров групп.</b>",
+        reply_markup=get_group_filter_menu_keyboard(filters)
+    )
+    await state.set_state(ShowProfiles.filter_menu)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "set_group_filter_genres", ShowProfiles.filter_menu)
+async def start_set_group_genres_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s перешел к настройке фильтра жанров ГРУПП", user_id)
+
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+    selected = filters.get('genres', [])
+
+    # Используем ту же клавиатуру, что и для юзеров, она универсальна
+    keyboard = make_genre_filter_keyboard(selected)
+
+    await callback.message.edit_text(
+        "🎶 <b>Жанры групп</b>\n"
+        "Выберите жанры, которые играют группы:",
+        reply_markup=keyboard
+    )
+    # Устанавливаем специальное состояние для ГРУПП
+    await state.set_state(ShowProfiles.filter_group_genres)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("filter_genre_"), ShowProfiles.filter_group_genres)
+async def toggle_group_genre_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+
+    # Если нажали "Свой вариант" — пропускаем, это обработает следующий хендлер
+    if callback.data == "filter_genre_custom_prompt":
+        return
+
+    genre_name = callback.data.split("filter_genre_")[1]
+
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+    selected_genres = filters.get('genres', [])
+
+    action = "добавил"
+    if genre_name in selected_genres:
+        selected_genres.remove(genre_name)
+        action = "удалил"
+    else:
+        selected_genres.append(genre_name)
+
+    logger.info("Пользователь ID=%s %s жанр '%s' в фильтр ГРУПП", user_id, action, genre_name)
+
+    filters['genres'] = selected_genres
+    await state.update_data(group_filters=filters)
+
+    keyboard = make_genre_filter_keyboard(selected_genres)
+
+    with suppress(TelegramBadRequest):
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "filter_genre_custom_prompt", ShowProfiles.filter_group_genres)
+async def prompt_custom_group_genre(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    logger.info("Пользователь ID=%s запросил ввод кастомного жанра для фильтра ГРУПП", user_id)
+
+    await callback.message.edit_text("📝 <b>Введите название жанра</b>, который вы ищете у групп:")
+    # Специальное состояние для ввода текста
+    await state.set_state(ShowProfiles.filter_group_genres_custom)
+    await callback.answer()
+
+
+@router.message(ShowProfiles.filter_group_genres_custom)
+async def save_custom_group_genre_filter(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    new_genre = message.text.strip()
+
+    if not new_genre:
+        await message.answer("⚠️ Пожалуйста, введите название жанра.")
+        return
+
+    # Ограничение длины, чтобы не ломать клавиатуру
+    if len(new_genre) > 30:
+        await message.answer("⚠️ Название жанра слишком длинное (макс 30 символов).")
+        return
+
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+    selected_genres = filters.get('genres', [])
+
+    if new_genre not in selected_genres:
+        selected_genres.append(new_genre)
+        filters['genres'] = selected_genres
+        await state.update_data(group_filters=filters)
+        logger.info("Пользователь ID=%s добавил кастомный жанр '%s' в фильтр ГРУПП", user_id, new_genre)
+
+    keyboard = make_genre_filter_keyboard(selected_genres)
+
+    await message.answer(
+        f"✅ Жанр <b>{new_genre}</b> добавлен в фильтр групп.\nВыберите еще или нажмите 'Готово'.",
+        reply_markup=keyboard
+    )
+    # Возвращаем состояние выбора (кликов по кнопкам)
+    await state.set_state(ShowProfiles.filter_group_genres)
+
+
+@router.callback_query(F.data == "done_filter_genres", ShowProfiles.filter_group_genres)
+async def done_group_genre_filter(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    data = await state.get_data()
+    filters = data.get('group_filters', {})
+
+    genres_count = len(filters.get('genres', []))
+    logger.info("Пользователь ID=%s сохранил фильтр жанров ГРУПП (всего %d)", user_id, genres_count)
+
+    # Возвращаемся в главное меню фильтров ГРУПП
+    await callback.message.edit_text(
+        "⚙️ <b>Настройка фильтров групп.</b>\nЧто ищем?",
+        reply_markup=get_group_filter_menu_keyboard(filters)
+    )
+    # Возвращаем состояние главного меню фильтров
+    await state.set_state(ShowProfiles.filter_menu)
+    await callback.answer("Жанры групп сохранены!")

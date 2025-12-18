@@ -13,3 +13,8 @@ class ShowProfiles(StatesGroup):
     filter_genres_custom = State()
     filter_experience = State()
     filter_level = State()
+    filter_group_level = State()
+    filter_group_city = State()
+    filter_group_genres = State()
+    filter_group_genres_custom = State()
+    filter_group_menu = State()

@@ -80,20 +80,50 @@ def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
     #builder.row(InlineKeyboardButton(text="Назад", callback_data="back_from_profile"))
     return builder.as_markup()
 
-# клавиатура для выбора инструмента
-def get_edit_instruments_keyboard(selected_instruments: list) -> InlineKeyboardMarkup:
-    standard_instruments = Instruments.list_values()
 
+def get_edit_instruments_keyboard(selected_instruments: List[str]) -> InlineKeyboardMarkup:
+    """
+    Генерирует Inline-клавиатуру для выбора инструментов, используя adjust(2)
+    для расположения стандартных вариантов в две колонки.
+    """
+    standard_instruments = Instruments.list_values()
     builder = InlineKeyboardBuilder()
 
+    # 1. Добавляем кнопки для всех стандартных инструментов
     for inst in standard_instruments:
         text = f"✅ {inst}" if inst in selected_instruments else inst
-        builder.row(InlineKeyboardButton(text=text, callback_data=f"edit_inst_{inst}"))
 
-    builder.row(InlineKeyboardButton(text="Свой вариант (введите текстом)", callback_data="input_own_instrument"))
+        # Используем .button() для добавления кнопки в буфер
+        builder.button(
+            text=text,
+            callback_data=f"edit_inst_{inst}"
+        )
 
-    builder.row(InlineKeyboardButton(text="✅ Готово (Перейти к оценке)", callback_data="instruments_ready_edit"))
-    builder.row(InlineKeyboardButton(text="Назад в меню", callback_data="back_to_params"))
+    # 2. Применяем adjust(2) для создания двух колонок из всех добавленных выше кнопок
+    builder.adjust(2)
+
+    # 3. Добавляем кнопки ввода своего варианта и управления
+    # Эти кнопки будут размещены ПОСЛЕ автоматической сетки
+
+    # Кнопка "Свой вариант" (занимает весь ряд)
+    builder.row(
+        InlineKeyboardButton(
+            text="Свой вариант (введите текстом)",
+            callback_data="input_own_instrument"
+        )
+    )
+
+    # Кнопки "Готово" и "Назад" (расположены в одном ряду, по две)
+    builder.row(
+        InlineKeyboardButton(
+            text="Назад в меню",
+            callback_data="back_to_params"
+        ),
+        InlineKeyboardButton(
+            text="✅ Готово",
+            callback_data="instruments_ready_edit"
+        )
+    )
 
     return builder.as_markup()
 
@@ -206,18 +236,33 @@ def make_keyboard_for_genre(selected: list[str]) -> InlineKeyboardMarkup:
         buttons.append(genre_options_list[i:i + 2])
 
     buttons.append([InlineKeyboardButton(text="Свой вариант 📝", callback_data="genre_Свой вариант")])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="back_to_params")])
     buttons.append([InlineKeyboardButton(text="Готово ✅", callback_data="done_genres")])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 # клавиатура для выбора города
-def make_keyboard_for_city():
-    cities = City.list_values() + ["Свой вариант"]
+def make_keyboard_for_city(selected_cities: List[str]) -> InlineKeyboardMarkup:
+    """
+    Создает клавиатуру городов. Выбранные города помечаются галочкой.
+    """
+    standard_cities = City.list_values()
+    builder = InlineKeyboardBuilder()
 
-    markup = InlineKeyboardBuilder()
-    for city in cities:
-        markup.add(InlineKeyboardButton(text=city, callback_data=f"city_{city}"))
+    for city in standard_cities:
+        # Если город уже в списке выбранных, добавляем эмодзи галочки
+        is_selected = city in selected_cities
+        text = f"✅ {city}" if is_selected else city
 
-    markup.adjust(2, 2, 2, 2, 1)
+        builder.button(text=text, callback_data=f"city_{city}")
 
-    return markup.as_markup()
+    builder.adjust(2)  # Сетка по 2 кнопки в ряд
+
+    # Дополнительные кнопки управления
+    builder.row(InlineKeyboardButton(text="Свой вариант 📝", callback_data="city_own"))
+    builder.row(
+        InlineKeyboardButton(text="Назад", callback_data="back_to_params"),
+        InlineKeyboardButton(text="Готово ✅", callback_data="done_cities")
+    )
+
+    return builder.as_markup()
