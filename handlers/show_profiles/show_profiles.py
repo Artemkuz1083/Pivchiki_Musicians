@@ -14,7 +14,6 @@ from handlers.show_profiles.show_keyboards import choose_keyboard_for_show, \
     make_experience_filter_keyboard, make_level_filter_keyboard
 from handlers.show_profiles.show_keyboards import get_filter_menu_keyboard
 from handlers.start import start
-from main import bot
 from states.states_show_profiles import ShowProfiles
 from database.enums import Actions
 
@@ -264,7 +263,6 @@ async def show_profiles(message: types.Message, state: FSMContext):
         experience_display = getattr(user.has_performance_experience, 'value', 'Не указано')
         about_me_display = user.about_me if user.about_me else "Не указано"
         external_link_display = user.external_link if user.external_link else "Не указана"
-        contacts_display = user.contacts if user.contacts else "Не указано"
 
         # Если есть ссылка, делаем её кликабельной, иначе оставляем текст
         if external_link_display and external_link_display != "Не указана":
@@ -280,7 +278,6 @@ async def show_profiles(message: types.Message, state: FSMContext):
             f"<i>{about_me_display}</i>\n\n"
             f"🧠 <b>Уровень теоретических знаний:</b> {stars_knowledge}\n"
             f"🎤 <b>Опыт выступлений:</b> {experience_display or 'Не указано'}\n\n"
-            f"📞 <b>Контакты:</b> {contacts_display}\n"
             f"🔗 <b>Внешняя ссылка:</b> {link_html}\n\n"
             f"🎼 <b>Любимые жанры:</b> {genres_display}\n\n"
             f"🎹 <b>Инструменты:</b>\n"
@@ -289,14 +286,14 @@ async def show_profiles(message: types.Message, state: FSMContext):
 
         if user.photo_path:
             try:
-                await bot.send_photo(chat_id, photo=user.photo_path, caption="📸 <b>Фото профиля:</b>")
+                await message.send_photo(chat_id, photo=user.photo_path, caption="📸 <b>Фото профиля:</b>")
                 logger.info("Пользователю ID=%s отправлено фото профиля ID=%s", user_id, user.id)
             except Exception as e:
                 logger.error("Ошибка отправки фото для пользователя ID=%s: %s", user_id, e)
 
         if user.audio_path:
             try:
-                await bot.send_audio(chat_id, audio=user.audio_path, caption="🎧 <b>Демо-трек:</b>")
+                await message.send_audio(chat_id, audio=user.audio_path, caption="🎧 <b>Демо-трек:</b>")
                 logger.info("Пользователю ID=%s отправлено аудио профиля ID=%s", user_id, user.id)
             except Exception as e:
                 logger.error("Ошибка отправки аудио для пользователя ID=%s: %s", user_id, e)
@@ -337,8 +334,8 @@ async def info(message: types.Message, state: FSMContext):
 
 
 # обработка лайка
-@router.message(F.text.startswith("❤️"), ShowProfiles.show_bands)
-@router.message(F.text.startswith("❤️"), ShowProfiles.show_profiles)
+@router.message(F.text.startswith("❤️ Оценить анкету"), ShowProfiles.show_bands)
+@router.message(F.text.startswith("❤️ Оценить анкету"), ShowProfiles.show_profiles)
 async def like(message: types.Message, state: FSMContext):
     data = await state.get_data()
     user_id = data.get("user_id")

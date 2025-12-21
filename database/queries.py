@@ -4,10 +4,9 @@ from typing import List, Dict, Optional
 from venv import logger
 
 from sqlalchemy import select, update, delete, insert, func, exists, and_, or_
-from sqlalchemy import select, update, delete, insert, func, exists
 from sqlalchemy.dialects.postgresql import Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, joinedload, selectinload
 
 from .enums import PerformanceExperience, Actions
 from .models import User, Instrument, GroupMember, GroupProfile, UserGenre, GroupGenre, UserLikesUser, UserLikesGroup
@@ -167,29 +166,33 @@ async def update_user_genres(user_id, genres_names: List[str]):
 
 async def update_user_instruments(user_id: int, instrument_names: list):
     async with AsyncSessionLocal() as session:
-        # 1. Загружаем пользователя, используя сессию
+        # Загружаем пользователя с инструментами
         user_stmt = select(User).where(User.id == user_id).options(selectinload(User.instruments))
-        user = (await session.execute(user_stmt)).scalar_one_or_none()
+        user = (await session.execute(user_stmt)).unique().scalar_one_or_none()
+        if not user:
+            return  # пользователь не найден
 
+        # Сохраняем текущие уровни
         current_levels = {inst.name: inst.proficiency_level for inst in user.instruments}
 
-        # Удаляем старые записи
-        await session.execute(delete(Instrument).where(Instrument.user_id == user_id))
+        # Очистка старых инструментов
+        user.instruments.clear()
+        await session.flush()  # синхронизируем удаление
 
-        new_instrument_objects = []
+        # Добавляем новые инструменты
         DEFAULT_PROFICIENCY_LEVEL = 1
-
+        new_instruments = []
         for name in instrument_names:
             level_to_assign = current_levels.get(name, DEFAULT_PROFICIENCY_LEVEL)
-            new_instrument = Instrument(
+            new_instruments.append(Instrument(
                 user_id=user_id,
                 name=name,
                 proficiency_level=level_to_assign
-            )
-            new_instrument_objects.append(new_instrument)
+            ))
 
-        user.instruments = new_instrument_objects
+        user.instruments.extend(new_instruments)
         await session.commit()
+
 
 async def update_user_instruments_for_registration(user_id: int, instruments: List[Instrument]):
     async with AsyncSessionLocal() as session:
@@ -603,3 +606,64 @@ async def get_band_which_not_action(swiper_id: int):
         result = await session.execute(stmt)
         user = result.scalars().first()
         return user
+
+async def get_users_who_liked_me(my_user_id: int) -> User | None:
+    """
+    Пользователь, который лайкнул меня,
+    и по которому я ещё не делал LIKE / SKIP.
+    """
+    async with AsyncSessionLocal() as session:
+        MyAction = aliased(UserLikesUser)
+
+        stmt = (
+            select(User)
+            .join(
+                UserLikesUser,
+                User.id == UserLikesUser.swiper_user_id
+            )
+            .where(
+                UserLikesUser.target_user_id == my_user_id,
+                UserLikesUser.action == Actions.LIKE,
+
+                ~exists(
+                    select(1)
+                    .where(
+                        MyAction.swiper_user_id == my_user_id,
+                        MyAction.target_user_id == User.id
+                    )
+                )
+            )
+            .options(
+                joinedload(User.instruments),
+                joinedload(User.genres)
+            )
+        )
+
+        result = await session.execute(stmt)
+        return result.scalars().first()
+
+
+async def get_my_matches(
+    my_user_id: int,
+    limit: int = 10,
+    offset: int = 0
+) -> list[User]:
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            select(User)
+            .join(UserLikesUser, User.id == UserLikesUser.swiper_user_id)
+            .where(
+                UserLikesUser.target_user_id == my_user_id,
+                UserLikesUser.action == Actions.LIKE
+            )
+            .options(
+                joinedload(User.instruments),
+                joinedload(User.genres)
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+
+        result = await session.execute(stmt)
+        return result.unique().scalars().all()
+

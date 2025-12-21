@@ -738,13 +738,14 @@ async def _send_level_selection_menu(callback: types.CallbackQuery, state: FSMCo
 @router.callback_query(F.data == "instruments_ready_edit", ProfileStates.instrument_edit)
 async def finalize_instrument_editing(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    logger.info("Пользователь %s завершает редактирование списка инструментов", user_id)
     await callback.answer("Сохранение...")
     data = await state.get_data()
 
     selected_inst = data.get("user_choice_inst", [])
     own_inst = data.get("own_user_inst", [])
     all_instruments = selected_inst + own_inst
+
+    logger.info("Пользователь %s завершает редактирование списка инструментов %s", user_id, all_instruments)
 
     try:
         await update_user_instruments(user_id, all_instruments)

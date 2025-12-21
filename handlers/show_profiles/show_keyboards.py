@@ -41,7 +41,7 @@ def show_reply_keyboard_for_registered_users():
     kb = ReplyKeyboardBuilder()
     kb.row(
         types.KeyboardButton(text="Следующая анкета"),
-        types.KeyboardButton(text="❤️")
+        types.KeyboardButton(text="❤️ Оценить анкету")
     )
     kb.row(
         types.KeyboardButton(text="Фильтр 🔍"),

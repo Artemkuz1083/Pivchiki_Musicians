@@ -41,6 +41,8 @@ async def start(message: types.Message, state: FSMContext):
         kb = [
             [types.KeyboardButton(text="👤 Моя анкета")],
             [types.KeyboardButton(text="🔍 Смотреть анкеты")],
+            [types.KeyboardButton(text="❤️ Лайки")],
+            [types.KeyboardButton(text="👥 Мои мэтчи")],
         ]
 
         # 2. Условное добавление кнопки "Зарегистрировать группу"

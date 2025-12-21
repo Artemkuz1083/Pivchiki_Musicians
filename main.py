@@ -6,6 +6,8 @@ from aiogram import Bot, Dispatcher
 from handlers import start
 from handlers.band.band_profile import edit_band_profile
 from handlers.band.band_registration import band_registration
+from handlers.likes import likes
+from handlers.match import match
 from handlers.profile import profile
 from handlers.registration import registration
 from database.session import init_db
@@ -37,6 +39,8 @@ async def main():
     dp.include_router(edit_band_profile.router)
     dp.include_router(start.router)
     dp.include_router(show_profiles.router)
+    dp.include_router(likes.router)
+    dp.include_router(match.router)
     await dp.start_polling(bot)
 
 
