@@ -90,9 +90,9 @@ async def send_band_profile(
     # В оригинале вы отправляли отдельным сообщением. Оставим логику, но с HTML.
     if success_message:
         if isinstance(callback_or_message, types.CallbackQuery):
-            await callback_or_message.message.answer(f"✅ {success_message}", parse_mode='HTML')
+            await callback_or_message.message.answer(f"{success_message}", parse_mode='HTML')
         else:
-            await callback_or_message.answer(f"✅ {success_message}", parse_mode='HTML')
+            await callback_or_message.answer(f"{success_message}", parse_mode='HTML')
 
     # Формируем текст анкеты.
     # Примечание: success_message можно не передавать внутрь format_band_profile,

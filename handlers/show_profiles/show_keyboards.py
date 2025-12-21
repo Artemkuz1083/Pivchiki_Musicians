@@ -8,6 +8,7 @@ from database.enums import PerformanceExperience
 from handlers.enums.cities import City
 from handlers.enums.genres import Genre
 from handlers.enums.instruments import Instruments
+from handlers.enums.seriousness_level import SeriousnessLevel
 
 
 # клавиатура для выбора, что хочет смотреть пользователь
@@ -355,4 +356,93 @@ def make_level_filter_keyboard(current_level: int | None) -> types.InlineKeyboar
         callback_data="back_from_level_filter"
     ))
 
+    return builder.as_markup()
+
+
+def get_group_filter_menu_keyboard(current_filters: Dict) -> types.InlineKeyboardMarkup:
+    # 1. Получаем текущие настройки для городов и жанров
+    cities = current_filters.get('cities', [])
+    city_display = f"{len(cities)} выбрано" if cities else "Все"
+
+    genres = current_filters.get('genres', [])
+    genre_display = f"{len(genres)} выбрано" if genres else "Все"
+
+    # --- ИСПРАВЛЕНИЕ ДЛЯ УРОВНЯ ---
+    # Достаем список КОРОТКИХ имен (например, ['HOBBY', 'PRO'])
+    selected_names = current_filters.get('seriousness_level_names', [])
+
+    if not selected_names:
+        level_display = "Любой"
+    else:
+        # Превращаем ['HOBBY'] в читаемое название для меню
+        readable_names = []
+        for name in selected_names:
+            try:
+                # Берем значение из Enum и убираем текст в скобках для краткости
+                full_val = SeriousnessLevel[name.upper()].value
+                short_val = full_val.split('(')[0].strip()
+                readable_names.append(short_val)
+            except (KeyError, ValueError):
+                continue
+
+        level_display = ", ".join(readable_names)
+
+        # Если текст слишком длинный, показываем кол-во
+        if len(level_display) > 20:
+            level_display = f"Выбрано: {len(selected_names)}"
+    # ------------------------------
+
+    builder = InlineKeyboardBuilder()
+
+    # 2. Кнопки настроек
+    builder.row(types.InlineKeyboardButton(
+        text=f"🏙️ Города: {city_display}",
+        callback_data="set_group_filter_city"
+    ))
+
+    builder.row(types.InlineKeyboardButton(
+        text=f"🎶 Жанры: {genre_display}",
+        callback_data="set_group_filter_genres"
+    ))
+
+    builder.row(types.InlineKeyboardButton(
+        text=f"📊 Уровень: {level_display}",
+        callback_data="set_group_filter_level"
+    ))
+
+    # 3. Управление
+    builder.row(
+        types.InlineKeyboardButton(
+            text="Сбросить фильтры 🗑️",
+            callback_data="reset_group_filters"
+        ),
+        types.InlineKeyboardButton(
+            text="Смотреть группы 👀",
+            callback_data="exit_group_filters_menu"
+        )
+    )
+    return builder.as_markup()
+
+
+# Клавиатура выбора уровня серьезности (Hobby, Amateur, Pro...)
+def make_seriousness_filter_keyboard(selected_names: List[str]) -> types.InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+
+    for member in SeriousnessLevel:
+        # member.name (например, "HOBBY") используется для логики и callback_data
+        # member.value (например, "Хобби (редкие репетиции)") используется для текста кнопки
+
+        is_selected = member.name in selected_names
+        text = f"✅ {member.value}" if is_selected else member.value
+
+        builder.row(types.InlineKeyboardButton(
+            text=text,
+            # НОВАЯ КОРОТКАЯ CALLBACK_DATA: "fgl_hobby", "fgl_pro" (максимум ~10-15 байт)
+            callback_data=f"fgl_{member.name.lower()}"
+        ))
+
+    builder.row(types.InlineKeyboardButton(
+        text="Готово ✅",
+        callback_data="done_group_filter_level"
+    ))
     return builder.as_markup()
