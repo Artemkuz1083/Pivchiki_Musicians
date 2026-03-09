@@ -14,6 +14,7 @@ from handlers.enums.cities import City
 from handlers.enums.seriousness_level import SeriousnessLevel
 from handlers.profile.profile_keyboards import make_keyboard_for_genre
 from handlers.registration.registration import logger  # Используем существующий логгер
+from utils.analytics import track_event
 
 router = Router()
 
@@ -31,6 +32,7 @@ async def _start_group_registration_logic(callback_or_message: types.CallbackQue
         user_id = callback_or_message.from_user.id
         chat_id = callback_or_message.chat.id
 
+    await track_event(user_id, "band_registration_started")
     logger.info("Пользователь %s начал регистрацию группы", user_id)
 
     await callback_or_message.bot.send_message(
@@ -419,6 +421,11 @@ async def _save_band_and_finish(source: types.Message | types.CallbackQuery, use
 
     try:
         await create_group(group_data)
+        await track_event(user_id, "band_registration_success", {
+            "city": data.get("city"),
+            "level": data.get("seriousness_level"),
+            "genre_count": len(data.get("genres", []))
+        })
         logger.info("🎉 Группа успешно зарегистрирована для пользователя %s: %s. Данные: %s",
                     user_id, group_data['name'],
                     {k: v for k, v in group_data.items() if k not in ['user_id', 'description']})

@@ -14,6 +14,7 @@ from handlers.registration.registration_keyboards import (
 from database.queries import *
 from handlers.start import start
 from states.states_registration import RegistrationStates
+from utils.analytics import track_event
 
 # Инициализируем логгер
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ router = Router()
 async def start_search(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     logger.info("Пользователь %s начал регистрацию", user_id)
-
+    await track_event(user_id, "registration_started")
     await state.set_state(RegistrationStates.name)
 
     # Редактируем сообщение, удаляя старую клавиатуру
@@ -467,6 +468,7 @@ async def save_contacts(message: types.Message, state: FSMContext):
 
     try:
         await update_user(user_id, contacts=contact_text)
+        await track_event(user_id, "registration_success")
         logger.info("Контакты пользователя %s сохранены: %s", user_id, contact_text)
     except Exception:
         logger.exception("Ошибка при сохранении контактов пользователя %s", user_id)

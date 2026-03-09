@@ -18,6 +18,7 @@ from handlers.profile.profile_keyboards import get_instrument_selection_keyboard
     get_theory_level_keyboard_emoji, get_proficiency_star_keyboard, rating_to_stars, make_keyboard_for_genre, \
     make_keyboard_for_city
 from states.states_profile import ProfileStates
+from utils.analytics import track_event
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +158,7 @@ async def _show_profile_logic(event: types.Message | types.CallbackQuery, state:
     """Универсальная логика для показа анкеты."""
     user_id = event.from_user.id
     logger.info("Пользователь %s запросил свою анкету", user_id)
+    await track_event(user_id, "profile_view")
 
     if isinstance(event, types.CallbackQuery):
         await event.answer()
@@ -471,6 +473,7 @@ async def handle_uploaded_audio_content(message: types.Message, state: FSMContex
         try:
             await save_user_audio(user_id=user_id, file_id=file_id)
             logger.info("Пользователь %s обновил демо-трек (%s)", user_id, content_type)
+            await track_event(user_id, "profile_update_audio", {"type": content_type})
         except Exception as e:
             logger.error("Ошибка сохранения аудио от %s: %s", user_id, e)
             await message.answer("⚠️ Ошибка сохранения. Попробуйте позже.")
@@ -507,6 +510,7 @@ async def handle_uploaded_photo(message: types.Message, state: FSMContext):
     try:
         await save_user_profile_photo(user_id=user_id, file_id=photo_file_id)
         logger.info("Пользователь %s обновил фото профиля", user_id)
+        await track_event(user_id, "profile_update_photo")
     except Exception as e:
         logger.error("Ошибка сохранения фото от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения фото.")
@@ -765,6 +769,7 @@ async def finalize_instrument_editing(callback: types.CallbackQuery, state: FSMC
 
     try:
         await update_user_instruments(user_id, all_instruments)
+        await track_event(user_id, "profile_update_instruments", {"count": len(all_instruments)})
         logger.info("Пользователь %s сохранил %d инструментов", user_id, len(all_instruments))
     except Exception as e:
         logger.error("Ошибка сохранения инструментов для %s: %s", user_id, e)
@@ -801,6 +806,7 @@ async def process_external_link(message: types.Message, state: FSMContext):
     try:
         await update_user(user_id=user_id, external_link=new_link)
         logger.info("Пользователь %s обновил внешнюю ссылку: %s", user_id, new_link)
+        await track_event(user_id, "profile_update_link")
     except Exception as e:
         logger.error("Ошибка сохранения ссылки от %s: %s", user_id, e)
         await message.answer("⚠️ Ошибка сохранения ссылки.")
@@ -842,6 +848,7 @@ async def save_new_contacts(message: types.Message, state: FSMContext):
             user_id,
             success_message="<b>Ваши контакты успешно обновлены!</b>"
         )
+        await track_event(user_id, "profile_update_contacts")
 
     except Exception as e:
         logger.error("Ошибка обновления контактов для пользователя ID=%s: %s", user_id, e)
@@ -944,6 +951,7 @@ async def done_genres(callback: types.CallbackQuery, state: FSMContext):
 
     try:
         await update_user_genres(user_id, all_genres_user)
+        await track_event(user_id, "profile_update_genres", {"count": len(all_genres_user)})
         logger.info("Пользователь %s сохранил %d жанров: %s", user_id, len(all_genres_user), all_genres_user)
     except Exception as e:
         logger.error("Ошибка сохранения жанров для %s: %s", user_id, e)
@@ -985,6 +993,7 @@ async def process_new_about_me(message: types.Message, state: FSMContext):
 
     try:
         await update_user_about_me(user_id, about_me_text)
+        await track_event(user_id, "profile_update_bio", {"length": len(about_me_text)})
         logger.info("Пользователь %s обновил раздел 'О себе'", user_id)
     except Exception as e:
         logger.error("Ошибка сохранения 'О себе' от %s: %s", user_id, e)

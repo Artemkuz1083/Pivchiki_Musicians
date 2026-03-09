@@ -8,6 +8,7 @@ from database.enums import Actions
 from database.queries import get_users_who_liked_me, save_user_interaction
 from handlers.start import start
 from states.states_likes import LikesStates
+from utils.analytics import track_event
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -31,6 +32,7 @@ def keyboard():
 
 async def render_profile(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    await track_event(user_id, "profile_card_shown", {"target_id": user_id})
     logger.info("Загружаем анкету для пользователя ID=%s", user_id)
 
     user = await get_users_who_liked_me(my_user_id=user_id)
@@ -79,6 +81,8 @@ async def render_profile(message: types.Message, state: FSMContext):
 
 @router.message(F.text.startswith("❤️ Лайки"))
 async def show_likes(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    await track_event(user_id, "likes_view_started")
     logger.info("Пользователь ID=%s вошёл в режим лайков", message.from_user.id)
     await state.set_state(LikesStates.see_profiles)
     await render_profile(message, state)
@@ -88,6 +92,7 @@ async def show_likes(message: types.Message, state: FSMContext):
 async def skip_profile(message: types.Message, state: FSMContext):
     data = await state.get_data()
     target_id = data.get("current_target_id")
+    await track_event(message.from_user.id, "profile_interaction", {"action": "skip"})
     logger.info(
         "Пользователь ID=%s SKIP ID=%s",
         message.from_user.id,
@@ -126,7 +131,7 @@ async def like_profile(message: types.Message, state: FSMContext):
         target_id,
         Actions.LIKE
     )
-
+    await track_event(message.from_user.id, "profile_interaction", {"action": "like"})
     logger.info(
         "Пользователь ID=%s LIKE ID=%s",
         message.from_user.id,

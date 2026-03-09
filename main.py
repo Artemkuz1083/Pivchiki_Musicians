@@ -33,6 +33,7 @@ dp = Dispatcher()
 
 async def main():
     await init_db()
+    dp.update.outer_middleware(AnalyticsMiddleware())
     dp.include_router(registration.router)
     dp.include_router(profile.router)
     dp.include_router(band_registration.router)
@@ -43,6 +44,16 @@ async def main():
     dp.include_router(match.router)
     await dp.start_polling(bot)
 
+import asyncio
+from utils.analytics import track_event, AnalyticsMiddleware  # Импортируй свою функцию
+
+async def test():
+    print("Отправка тестового события...")
+    await track_event(user_id=12345, event_name="test_connection", params={"status": "working"})
+    print("Готово! Проверь вкладку 'События' в AppMetrica через 5-10 минут.")
+
+if __name__ == "__main__":
+    asyncio.run(test())
 
 if __name__ == "__main__":
     print("Бот запущен")
