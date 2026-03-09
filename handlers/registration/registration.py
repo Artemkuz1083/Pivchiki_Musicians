@@ -3,7 +3,8 @@ import logging
 
 from aiogram import F, types, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardButton, WebAppInfo
 from handlers.registration.registration_keyboards import (
     make_keyboard_for_instruments,
     make_keyboard_for_genre,
@@ -475,20 +476,31 @@ async def save_contacts(message: types.Message, state: FSMContext):
         await message.answer("Произошла ошибка при сохранении контактов. Попробуйте еще раз.")
         return
 
-    # --- ФИНАЛ РЕГИСТРАЦИИ ---
+    WEB_APP_URL = "https://music-app.vercel.app"
+
     msg_text = (
         "🎉 <b>Отлично! Регистрация завершена.</b>\n\n"
-        "Теперь вам доступен ваш профиль.\n"
-        "💡 <i>Чтобы ваше объявление привлекло больше внимания, рекомендуем дополнить информацию в профиле (фото, аудио).</i>"
+        "Теперь вам доступен ваш профиль и поиск музыкантов.\n"
+        "💡 <i>В приложении поиск работает быстрее и удобнее!</i>"
     )
 
-    button = [
-        [types.InlineKeyboardButton(text="👤 Моя анкета", callback_data="my_profile")],
-        [types.InlineKeyboardButton(text="🎸 Зарегистрировать группу", callback_data="start_band_registration")],
-        [types.InlineKeyboardButton(text="🔍 Смотреть анкеты", callback_data="show_with_registration")]
-    ]
-    markup = InlineKeyboardMarkup(inline_keyboard=button)
+    # Создаем клавиатуру
+    builder = InlineKeyboardBuilder()
 
-    await message.answer(text=msg_text, reply_markup=markup, parse_mode="HTML")
+    # Кнопка для открытия Web App (Смотреть анкеты)
+    builder.row(InlineKeyboardButton(
+        text="🔍 Открыть Web App",
+        web_app=WebAppInfo(url=WEB_APP_URL)
+    ))
+
+    # Обычные кнопки для управления профилем внутри бота
+    builder.row(InlineKeyboardButton(text="👤 Моя анкета", callback_data="my_profile"))
+    builder.row(InlineKeyboardButton(text="🎸 Создать группу", callback_data="start_band_registration"))
+
+    await message.answer(
+        text=msg_text,
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
 
     await state.clear()

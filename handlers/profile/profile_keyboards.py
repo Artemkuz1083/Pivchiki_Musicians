@@ -1,8 +1,8 @@
 from typing import List
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 from database.enums import PerformanceExperience
 from handlers.enums.cities import City
@@ -60,6 +60,13 @@ def get_experience_selection_keyboard() -> InlineKeyboardMarkup:
 def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
+    WEB_APP_URL = "https://music-app.vercel.app"
+
+    builder.row(InlineKeyboardButton(
+        text="🔍 Открыть Web App",
+        web_app=WebAppInfo(url=WEB_APP_URL)
+    ))
+
     builder.add(
         InlineKeyboardButton(text="Имя", callback_data="edit_name"),
         InlineKeyboardButton(text="Город", callback_data="edit_city"),
@@ -76,7 +83,7 @@ def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="О себе", callback_data="edit_about_me"),
     )
 
-    builder.adjust(2)
+    builder.adjust(1, 2)
     #builder.row(InlineKeyboardButton(text="Назад", callback_data="back_from_profile"))
     return builder.as_markup()
 
