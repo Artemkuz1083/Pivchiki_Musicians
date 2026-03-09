@@ -6,6 +6,7 @@ from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 from database.models import User
 from database.queries import get_my_matches, get_user
+from utils.analytics import track_event
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -66,6 +67,7 @@ def matches_keyboard(matches: list[User], page: int):
 async def show_matches(message: types.Message):
     user_id = message.from_user.id
     page = 0
+    await track_event(user_id, "matches_list_viewed")
 
     matches = await get_my_matches(
         my_user_id=user_id,
@@ -104,7 +106,7 @@ async def matches_callback(
 
     if callback_data.action == "open":
         match_id = callback_data.user_id
-
+        await track_event(user_id, "match_profile_opened", {"target_id": match_id})
         user = await (get_user(match_id))
 
         await render_profile(callback.message, user)

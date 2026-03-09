@@ -18,6 +18,7 @@ from handlers.enums.cities import City
 from handlers.enums.genres import Genre
 from handlers.enums.seriousness_level import SeriousnessLevel
 from states.states_profile import ProfileStates
+from utils.analytics import track_event
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ async def process_new_band_name(message: types.Message, state: FSMContext):
 
     try:
         await update_band_name(user_id, new_name)
+        await track_event(user_id, "band_edit_name")
         logger.info("Название группы пользователя %s успешно обновлено на: %s", user_id, new_name)  # <-- LOG
     except Exception as e:
         logger.error("Ошибка обновления названия группы для %s: %s", user_id, e)  # <-- LOG
@@ -117,6 +119,7 @@ async def process_new_band_year(message: types.Message, state: FSMContext):
 
     try:
         await update_band_year(user_id, year_text)
+        await track_event(user_id, "band_edit_year")
         logger.info("Год основания группы пользователя %s успешно обновлен на: %s", user_id, year_text)  # <-- LOG
     except Exception as e:
         logger.error("Ошибка обновления года группы для %s: %s", user_id, e)  # <-- LOG
@@ -290,6 +293,7 @@ async def done_band_genres(callback: types.CallbackQuery, state: FSMContext):
 
     try:
         await update_band_genres(user_id, all_genres_user)
+        await track_event(user_id, "band_edit_genres", {"count": len(all_genres_user)})
         logger.info("Жанры группы пользователя %s успешно обновлены в БД", user_id)  # <-- LOG
     except Exception as e:
         logger.error("Ошибка при сохранении жанров группы пользователя %s: %s", user_id, e)  # <-- LOG
@@ -418,7 +422,8 @@ async def process_edited_city(callback: types.CallbackQuery, state: FSMContext):
 
     # Сохраняем и обновляем
     await update_band_city(user_id, city)
-    logger.info("Город группы пользователя %s успешно обновлен на: %s", user_id, city)  # <-- LOG
+    await track_event(user_id, "band_edit_city", {"city": city})
+    logger.info("Город группы пользователя %s успешно обновлен на: %s", user_id, city)
     await state.clear()
 
     success_msg = f"✅ Город группы успешно обновлен на: <b>{html.escape(city)}</b>"
@@ -505,6 +510,7 @@ async def process_edited_description(message: types.Message, state: FSMContext):
 
     try:
         await update_band_description(user_id, new_description)
+        await track_event(user_id, "band_edit_description", {"action": "update"})
         logger.info("Описание группы пользователя %s успешно обновлено.", user_id)  # <-- LOG
     except Exception as e:
         logger.error("Ошибка сохранения описания группы для %s: %s", user_id, e)  # <-- LOG
@@ -570,18 +576,19 @@ async def process_edited_level(callback: types.CallbackQuery, state: FSMContext)
     data = await state.get_data()
     user_id = data.get("user_id")
 
-    logger.info("Пользователь %s выбрал новый уровень серьезности: %s", user_id, level_key)  # <-- LOG
+    logger.info("Пользователь %s выбрал новый уровень серьезности: %s", user_id, level_key)
 
     try:
         selected_level = SeriousnessLevel[level_key]
     except KeyError:
-        logger.error("Пользователь %s выбрал неверный уровень серьезности: %s", user_id, level_key)  # <-- LOG
+        logger.error("Пользователь %s выбрал неверный уровень серьезности: %s", user_id, level_key)
         await callback.answer("⚠️ Неверный выбор уровня.")
         return
 
     await update_band_seriousness_level(user_id, selected_level.value)
+    await track_event(user_id, "band_edit_level", {"level": selected_level.value})
     logger.info("Уровень серьезности группы пользователя %s успешно обновлен на: %s", user_id,
-                selected_level.value)  # <-- LOG
+                selected_level.value)
     await state.clear()
 
     success_msg = f"✅ Уровень серьезности успешно обновлен на: <b>{html.escape(selected_level.value)}</b>"
@@ -598,6 +605,7 @@ async def universal_back_to_band_profile(callback: types.CallbackQuery, state: F
 
     # Мы можем логгировать текущее состояние перед очисткой
     current_state = await state.get_state()
+    await track_event(user_id, "band_edit_cancel", {"from_state": str(current_state)})
     logger.info("Пользователь %s отменил редактирование (был в %s) и возвращается в профиль группы.", user_id,
                 current_state)
 
