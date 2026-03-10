@@ -36,6 +36,7 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 10022
           script: |
             cd pivchiki/
             docker compose pull
