@@ -1,0 +1,87 @@
+basePath: /
+definitions:
+  delivery.ErrorMsg:
+    properties:
+      message:
+        type: string
+    type: object
+  domain.FullProfile:
+    properties:
+      aboutUser:
+        type: string
+      age:
+        type: integer
+      city:
+        type: string
+      contact:
+        type: string
+      genres:
+        items:
+          type: string
+        type: array
+      id:
+        format: int64
+        type: integer
+      instruments:
+        items:
+          $ref: '#/definitions/domain.Instrument'
+        type: array
+      isVisible:
+        type: boolean
+      link:
+        type: string
+      performancExperience:
+        type: string
+      proficiencyLevel:
+        type: integer
+      theoryLevel:
+        type: integer
+      userName:
+        type: string
+    type: object
+  domain.Instrument:
+    properties:
+      instrument:
+        type: string
+      instrumentProficiencyLevel:
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для музыкального сервиса "Пивчики"
+  title: Pivchiki API
+  version: "1.0"
+paths:
+  /api/v1/profile:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает полную информацию о профиле на основе ID из JWT токена
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешное получение профиля
+          schema:
+            $ref: '#/definitions/domain.FullProfile'
+        "400":
+          description: Профиль не найден
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+        "401":
+          description: Вы не авторизованы
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+      security:
+      - ApiKeyAuth: []
+      summary: Получить профиль текущего пользователя
+      tags:
+      - profile
+securityDefinitions:
+  ApiKeyAuth:
+    description: 'Введите JWT токен в формате: Bearer <ваш_токен>'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

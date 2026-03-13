@@ -7,6 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PYTHON=/app
+ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-u", "main.py"]

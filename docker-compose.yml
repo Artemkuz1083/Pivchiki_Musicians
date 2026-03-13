@@ -1,15 +1,24 @@
 services:
   bot:
-    build: .
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+    build: ./telegram-bot
+    # dns:
+    #   - 8.8.8.8
+    #   - 1.1.1.1
     env_file:
       - .env
     depends_on:
       - db
     volumes:
-      - .:/app
+      - ./telegram-bot:/app
+
+  backend:
+    build: ./go-backend
+    ports:
+      - "8080:8080"
+    env_file: 
+      - .env
+    depends_on:
+      - db
 
   db:
     image: postgres:15

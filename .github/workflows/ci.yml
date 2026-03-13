@@ -22,13 +22,21 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push Bot
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./telegram-bot/telegram-bot
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/pivchiki_musicians-bot:latest
+
+      - name: Build and push Go Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./go-backend
+          file: ./go-backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/musicians-go-api:latest
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
