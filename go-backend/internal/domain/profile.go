@@ -6,26 +6,35 @@ import (
 
 type ProfileID uint64
 
+// @Description Уровень опыта выступлений
+// @Enum NEVER, LOCAL_GIGS, TOURS, PROFESSIONAL
 type PerformanceExperience string
 
 const (
-	ExpNever        PerformanceExperience = "NEVER"
-	ExpLocalGigs    PerformanceExperience = "LOCAL_GIGS"
-	ExpTours        PerformanceExperience = "TOURS"
-	ExpProfessional PerformanceExperience = "PROFESSIONAL"
+	expNever        PerformanceExperience = "NEVER"
+	expLocalGigs    PerformanceExperience = "LOCAL_GIGS"
+	expTours        PerformanceExperience = "TOURS"
+	expProfessional PerformanceExperience = "PROFESSIONAL"
 )
 
-// TODO: сделать аудио фото таймстап добавить плюс логики
+func (e PerformanceExperience) IsValid() bool {
+    switch e {
+    case expNever, expLocalGigs, expTours, expProfessional:
+        return true
+    }
+    return false
+}
+
+// TODO: сделать фото и аудио логику мб клиент или другую хуйню
 type FullProfile struct {
 	ID                   ProfileID
 	UserName             string
 	City                 string
 	Contact              string
-	PerformancExperience *string
+	PerformancExperience *PerformanceExperience
 	Link                 *string
 	AboutUser            *string
 	Age                  *uint
-	ProficiencyLevel     *uint
 	TheoryLevel          *uint
 	Genres               []string
 	Instruments          []*Instrument
@@ -37,10 +46,24 @@ type Instrument struct {
 	InstrumentProficiencyLevel uint
 }
 
-// type FullUpdatedProfile struct {
-// 	ID      ProfileID
-// 	Title   *string
-// 	Content *string
-// }
+type FullProfileToUpdate struct {
+	ID                   ProfileID
+	UserName             *string
+	City                 *string
+	Contact              *string
+	PerformancExperience *PerformanceExperience
+	Link                 *string
+	AboutUser            *string
+	Age                  *uint
+	TheoryLevel          *uint
+	Genres               *[]string
+	Instruments          *[]*UpdateInstrument
+	IsVisible            *bool
+}
+
+type UpdateInstrument struct {
+	Instrument                 *string
+	InstrumentProficiencyLevel *uint
+}
 
 var ErrNoteNotFound = errors.New("your profile is not found")

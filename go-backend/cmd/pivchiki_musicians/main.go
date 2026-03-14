@@ -33,7 +33,7 @@ func main() {
 
 	queries := db.New(pool)
 
-	repo := repository.NewInMemoryNoteRepository(queries)
+	repo := repository.NewInMemoryNoteRepository(queries, pool)
 
 	service := service.NewProfileService(repo)
 

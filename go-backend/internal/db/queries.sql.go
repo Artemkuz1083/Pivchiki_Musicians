@@ -7,16 +7,54 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteUser = `-- name: DeleteUser :exec
-DELETE FROM public.users
-WHERE id = $1
+const addUserGenre = `-- name: AddUserGenre :exec
+INSERT INTO user_genres (user_id, name) VALUES ($1, $2)
 `
 
-// Удаление пользователя
-func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteUser, id)
+type AddUserGenreParams struct {
+	UserID int64
+	Name   string
+}
+
+func (q *Queries) AddUserGenre(ctx context.Context, arg AddUserGenreParams) error {
+	_, err := q.db.Exec(ctx, addUserGenre, arg.UserID, arg.Name)
+	return err
+}
+
+const addUserInstrument = `-- name: AddUserInstrument :exec
+INSERT INTO instruments (user_id, name, proficiency_level) VALUES ($1, $2, $3)
+`
+
+type AddUserInstrumentParams struct {
+	UserID           int64
+	Name             string
+	ProficiencyLevel int32
+}
+
+func (q *Queries) AddUserInstrument(ctx context.Context, arg AddUserInstrumentParams) error {
+	_, err := q.db.Exec(ctx, addUserInstrument, arg.UserID, arg.Name, arg.ProficiencyLevel)
+	return err
+}
+
+const deleteUserGenres = `-- name: DeleteUserGenres :exec
+DELETE FROM user_genres WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserGenres(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, deleteUserGenres, userID)
+	return err
+}
+
+const deleteUserInstruments = `-- name: DeleteUserInstruments :exec
+DELETE FROM instruments WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserInstruments(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, deleteUserInstruments, userID)
 	return err
 }
 
@@ -103,4 +141,49 @@ func (q *Queries) GetUserInstruments(ctx context.Context, userID int64) ([]GetUs
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :exec
+UPDATE users
+SET 
+    name = COALESCE($2, name),
+    city = COALESCE($3, city),
+    age = COALESCE($4, age),
+    contacts = COALESCE($5, contacts),
+    theoretical_knowledge_level = COALESCE($6, theoretical_knowledge_level),
+    has_performance_experience = COALESCE($7, has_performance_experience),
+    about_me = COALESCE($8, about_me),
+    external_link = COALESCE($9, external_link),
+    is_visible = COALESCE($10, is_visible)
+WHERE id = $1
+`
+
+type UpdateUserProfileParams struct {
+	ID                        int64
+	Name                      pgtype.Text
+	City                      pgtype.Text
+	Age                       pgtype.Int4
+	Contacts                  pgtype.Text
+	TheoreticalKnowledgeLevel pgtype.Int4
+	HasPerformanceExperience  pgtype.Text
+	AboutMe                   pgtype.Text
+	ExternalLink              pgtype.Text
+	IsVisible                 pgtype.Bool
+}
+
+// Получаем обновленный профиль у юзера
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error {
+	_, err := q.db.Exec(ctx, updateUserProfile,
+		arg.ID,
+		arg.Name,
+		arg.City,
+		arg.Age,
+		arg.Contacts,
+		arg.TheoreticalKnowledgeLevel,
+		arg.HasPerformanceExperience,
+		arg.AboutMe,
+		arg.ExternalLink,
+		arg.IsVisible,
+	)
+	return err
 }

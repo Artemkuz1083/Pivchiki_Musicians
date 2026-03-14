@@ -10,8 +10,7 @@ func NewProfileRouter(handler *ProfileHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", handler.GetProfile)
-	// mux.HandleFunc("PATCH /", handler.UpdateProfile)
-	// mux.HandleFunc("DELETE /", handler.DeleteProfile)
+	mux.HandleFunc("PATCH /", handler.UpdateProfile)
 
 	return mux
 }
