@@ -17,7 +17,7 @@ async def track_event(user_id: int, event_name: str, params: dict = None):
 
     query_params = {
         "application_id": APP_ID,
-        "import_api_key": POST_API_KEY,
+        "post_api_key": POST_API_KEY,
         "event_name": event_name,
         "profile_id": str(user_id),
         "event_json": json.dumps(params) if params else "{}",

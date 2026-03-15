@@ -1,4 +1,4 @@
-name: Build docker image
+name: Build and Deploy
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
       - master
 
 jobs:
-  build-docker-image:
+  build-and-deploy:
     runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up docker buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to DockerHub
@@ -22,13 +22,21 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      - name: Build and push bot image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./telegram-bot
+          file: ./telegram-bot/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/pivchiki_musicians-bot:latest
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./go-backend
+          file: ./go-backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pivchiki_musicians-backend:latest
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
@@ -38,6 +46,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 10022
           script: |
-            cd pivchiki/
+            cd pivchiki
             docker-compose pull
             docker-compose up -d
+            docker image prune -f
