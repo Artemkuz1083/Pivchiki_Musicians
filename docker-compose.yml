@@ -1,35 +1,39 @@
-services:
-  bot:
-    build: ./telegram-bot
-    # dns:
-    #   - 8.8.8.8
-    #   - 1.1.1.1
-    env_file:
-      - .env
-    depends_on:
-      - db
-    volumes:
-      - ./telegram-bot:/app
+  services:
+    bot:
+      build:
+        context: ./telegram-bot
+        dockerfile: Dockerfile
+      # dns:
+      #   - 8.8.8.8
+      #   - 1.1.1.1
+      env_file:
+        - .env
+      depends_on:
+        - db
+      volumes:
+        - ./telegram-bot:/app
 
-  backend:
-    build: ./go-backend
-    ports:
-      - "8080:8080"
-    env_file: 
-      - .env
-    depends_on:
-      - db
+    backend:
+      build:
+        context: ./go-backend
+        dockerfile: Dockerfile
+      ports:
+        - "8080:8080"
+      env_file:
+        - .env
+      depends_on:
+        - db
 
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: music_app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: parol123
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_:/var/lib/postgresql/data
+    db:
+      image: postgres:15
+      environment:
+        POSTGRES_DB: music_app
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: parol123
+      ports:
+        - "5432:5432"
+      volumes:
+        - pg_:/var/lib/postgresql/data
 
-volumes:
-  pg_:
+  volumes:
+    pg_:

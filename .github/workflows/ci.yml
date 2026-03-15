@@ -47,5 +47,5 @@ jobs:
           port: 10022
           script: |
             cd pivchiki/
-            docker-compose pull
-            docker-compose up -d
+            docker-compose pull bot
+            docker-compose up -d --force-recreate
