@@ -1,5 +1,6 @@
 import html
 import logging
+import os
 
 from aiogram import F, types, Router
 from aiogram.fsm.context import FSMContext
@@ -16,6 +17,7 @@ from database.queries import *
 from handlers.start import start
 from states.states_registration import RegistrationStates
 from utils.analytics import track_event
+from utils.jwt_generator import create_access_token
 
 # Инициализируем логгер
 logger = logging.getLogger(__name__)
@@ -460,6 +462,7 @@ async def done_genre(callback: types.CallbackQuery, state: FSMContext):
 async def save_contacts(message: types.Message, state: FSMContext):
     contact_text = message.text.strip()
     user_id = message.from_user.id
+    username = message.from_user.username
 
     logger.info("Пытаемся получить контакты пользователя %s", user_id)
 
@@ -475,8 +478,14 @@ async def save_contacts(message: types.Message, state: FSMContext):
         logger.exception("Ошибка при сохранении контактов пользователя %s", user_id)
         await message.answer("Произошла ошибка при сохранении контактов. Попробуйте еще раз.")
         return
+    
+    token = create_access_token(user_id, username)
 
-    WEB_APP_URL = "https://music-app.vercel.app"
+    base_url = os.getenv("APP_EXTERNAL_URL")
+    token = create_access_token(user_id, username)
+
+    WEB_APP_URL = f"{base_url}/api/v1/profile?token={token}"
+    logger.info(f"Токен пользователя {base_url}/api/v1/profile?token={token}")
 
     msg_text = (
         "🎉 <b>Отлично! Регистрация завершена.</b>\n\n"

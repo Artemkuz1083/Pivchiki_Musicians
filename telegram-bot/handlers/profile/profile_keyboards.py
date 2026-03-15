@@ -1,4 +1,6 @@
 from typing import List
+import logging
+import os
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -8,6 +10,15 @@ from database.enums import PerformanceExperience
 from handlers.enums.cities import City
 from handlers.enums.genres import Genre
 from handlers.enums.instruments import Instruments
+from utils.jwt_generator import create_access_token
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+)
+
+logger = logging.getLogger(__name__)
+
 
 # клавиатура для редактирования профиля
 def get_profile_reply_keyboard() -> ReplyKeyboardMarkup:
@@ -57,10 +68,14 @@ def get_experience_selection_keyboard() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 # клавиатура для выбора параметров профиля
-def get_profile_selection_keyboard() -> InlineKeyboardMarkup:
+def get_profile_selection_keyboard(user_id: int, username: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    WEB_APP_URL = "https://music-app.vercel.app"
+    base_url = os.getenv("APP_EXTERNAL_URL")
+    token = create_access_token(user_id, username)
+
+    WEB_APP_URL = f"{base_url}/api/v1/profile?token={token}"
+    logger.info(f"Токен пользователя {base_url}/api/v1/profile?token={token}")
 
     builder.row(InlineKeyboardButton(
         text="🔍 Открыть Web App",

@@ -131,7 +131,8 @@ async def send_updated_profile(message: types.Message | types.CallbackQuery, use
             logger.error("Ошибка отправки аудио по file_id для %s: %s", user_id, e)
             await bot.send_message(chat_id, "⚠️ Демо-трек не удалось загрузить.")
 
-    keyboard = get_profile_selection_keyboard()
+    username = message.from_user.username
+    keyboard = get_profile_selection_keyboard(user_id, username)
 
     try:
         await bot.send_message(
@@ -207,10 +208,12 @@ async def start_filling_profile(callback: types.CallbackQuery, state: FSMContext
     await callback.message.edit_reply_markup(reply_markup=None)
     await state.set_state(ProfileStates.select_param_to_fill)
 
+    username = callback.from_user.username
+
     await callback.bot.send_message(
         chat_id=callback.message.chat.id,
         text="⚙️ <b>Редактирование профиля</b>\nВыберите параметр, который хотите изменить:",
-        reply_markup=get_profile_selection_keyboard(),
+        reply_markup=get_profile_selection_keyboard(user_id, username),
         parse_mode="HTML"
     )
 
@@ -264,6 +267,7 @@ async def process_new_age(message: types.Message, state: FSMContext):
 @router.callback_query(F.data == "edit_level")
 async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    username = callback.from_user.username
     logger.info("Пользователь %s начал редактирование уровня владения инструментами", user_id)
     await callback.answer()
     user_obj = await get_user(user_id)
@@ -272,7 +276,7 @@ async def start_editing_level(callback: types.CallbackQuery, state: FSMContext):
         logger.warning("Пользователь %s пытался редактировать уровень, не имея инструментов", user_id)
         await callback.message.edit_text(
             "⚠️ <b>У вас пока нет инструментов.</b>\nСначала добавьте их в разделе 'Инструменты'.",
-            reply_markup=get_profile_selection_keyboard(),
+            reply_markup=get_profile_selection_keyboard(user_id, username),
             parse_mode="HTML"
         )
         return
@@ -735,12 +739,13 @@ async def process_own_instrument_in_edit(message: types.Message, state: FSMConte
 
 async def _send_level_selection_menu(callback: types.CallbackQuery, state: FSMContext, user_id: int):
     user_obj = await get_user(user_id)
+    username = callback.from_user.username
 
     if not user_obj or not user_obj.instruments:
         logger.error("Инструменты не найдены для пользователя %s после сохранения.", user_id)
         await callback.message.edit_text(
             "⚠️ Инструменты не найдены.",
-            reply_markup=get_profile_selection_keyboard()
+            reply_markup=get_profile_selection_keyboard(user_id, username)
         )
         return
 
