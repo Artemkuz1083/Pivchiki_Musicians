@@ -1,51 +1,11 @@
-Инструкция по запуску и работе с API для разработки фронтенда.
 
-1. Настройка туннеля (ngrok)
-Для работы Telegram Mini App с локальным бэкендом нужно пробросить порты через ngrok.
+  # Mobile Musician Search Website
 
-Установи ngrok:
-winget install ngrok.ngrok
+  This is a code bundle for Mobile Musician Search Website. The original project is available at https://www.figma.com/design/qw5CxFxeVtmmd80MXG2lhY/Mobile-Musician-Search-Website.
 
-Авторизуйся:
-Зарегистрируйся на dashboard.ngrok.com, возьми токен и выполни:
-ngrok config add-authtoken ТВОЙ_ТОКЕН
+  ## Running the code
 
-Создай домен и запусти:
-Создай бесплатный домен в панели ngrok и запусти туннель:
-ngrok http 8080 --domain=ТВОЙ_ДОМЕН
+  Run `npm i` to install the dependencies.
 
-Если возникла ошибка или реконнект, попробуй выполнить ngrok update и добавить при запуске флаг --region=us или --region=eu.
-
-2. Конфигурация окружения (.env)
-В корне проекта создай файл .env и заполни его:
-
-JWT_SECRET=super_pivchiki_secret_2026
-JWT_ALGORITHM=HS256
-BOT_TOKEN=токен_твоего_бота
-APP_EXTERNAL_URL=адрес_твоего_домена_из_нгрок
-
-Примечание по DNS: Если бот не может достучаться до серверов, проверь docker-compose.yaml. Секция dns в сервисе bot должна быть закомментирована.
-
-3. Запуск проекта
-При первом запуске или подтягивании обновлений бэкенда выполняй:
-
-docker-compose up --build -d при локальной разрабокте выполняй безх флага --build
-
-4. Тестирование и работа с API (Swagger)
-Для работы с бэкендом не нужно смотреть исходный код. Переходи по ссылке:
-http://localhost:8080/swagger/index.html
-
-Там описаны все актуальные ручки, параметры запросов и примеры ответов.
-
-Как работать в Swagger:
-
-Зайди в Telegram бота, нажми кнопку "Моя анкета" и перейди в приложение.
-
-Открой логи контейнера бота (docker logs). Там будет URL с твоим сгенерированным JWT токеном.
-
-В верхней части страницы Swagger нажми кнопку Authorize (с зеленым замочком).
-
-Введи свой токен. После этого все запросы через кнопку Try it out будут проходить авторизацию.
-
-
-УРА ГОТОВА ТЕПЕРЬ ТЫ РЕАЛЬНЫЙ ПИВЧИК НУ ИЛИ ЛОХ ЕСЛИ НЕ РАЗОБРАЛСЯ С ГАЙДОМ
+  Run `npm run dev` to start the development server.
+  
