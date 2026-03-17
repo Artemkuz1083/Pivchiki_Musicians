@@ -7,14 +7,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from database.queries import create_group
+from database.queries import create_group, track_event
 from handlers.band.band_registration.band_registration_states import BandRegistrationStates
 from handlers.band.showing_band_profile_logic import send_band_profile
 from handlers.enums.cities import City
 from handlers.enums.seriousness_level import SeriousnessLevel
 from handlers.profile.profile_keyboards import make_keyboard_for_genre
 from handlers.registration.registration import logger  # Используем существующий логгер
-from utils.analytics import track_event
+# from utils.analytics import track_event
 
 router = Router()
 

@@ -187,3 +187,11 @@ class UserLikesGroup(Base):
 
     swiper: Mapped["User"] = relationship(foreign_keys=[swiper_user_id])
     target_group: Mapped["GroupProfile"] = relationship(foreign_keys=[target_group_id])
+
+class AnalyticsEvent(Base):
+    __tablename__ = "analytics_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    event_name: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

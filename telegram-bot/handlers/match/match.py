@@ -5,8 +5,8 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 from database.models import User
-from database.queries import get_my_matches, get_user
-from utils.analytics import track_event
+from database.queries import get_my_matches, get_user, track_event
+# from utils.analytics import track_event
 
 logger = logging.getLogger(__name__)
 router = Router()

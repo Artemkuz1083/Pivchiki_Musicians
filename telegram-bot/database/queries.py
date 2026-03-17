@@ -10,7 +10,8 @@ from sqlalchemy.orm import aliased, joinedload, selectinload
 
 from handlers.enums.seriousness_level import SeriousnessLevel
 from .enums import PerformanceExperience, Actions
-from .models import User, Instrument, GroupMember, GroupProfile, UserGenre, GroupGenre, UserLikesUser, UserLikesGroup
+from .models import User, Instrument, GroupMember, GroupProfile, UserGenre, GroupGenre, UserLikesUser, UserLikesGroup, \
+    AnalyticsEvent
 from .session import AsyncSessionLocal
 
 async def check_user(user_id: int) -> bool:
@@ -708,3 +709,23 @@ async def get_my_matches(
         result = await session.execute(stmt)
         return result.unique().scalars().all()
 
+
+
+async def track_event(user_id: int, event_name: str) -> None:
+    """Сохраняет аналитическое событие в БД."""
+    async with AsyncSessionLocal() as session:
+        try:
+            stmt = insert(AnalyticsEvent).values(
+                user_id=user_id,
+                event_name=event_name,
+                created_at=datetime.now(timezone.utc)
+            )
+
+            await session.execute(stmt)
+            await session.commit()
+
+            logging.info("Event saved to DB")
+
+        except Exception as e:
+            await session.rollback()
+            logging.error(f"DB analytics error: {e}")

@@ -11,14 +11,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.context import FSMContext
 
 from database.queries import get_band_data_by_user_id, update_band_year, update_band_name, update_band_genres, \
-    update_band_city, update_band_description, update_band_seriousness_level
+    update_band_city, update_band_description, update_band_seriousness_level, track_event
 from handlers.band.band_profile.band_profile_states import BandEditingStates
 from handlers.band.showing_band_profile_logic import send_band_profile
 from handlers.enums.cities import City
 from handlers.enums.genres import Genre
 from handlers.enums.seriousness_level import SeriousnessLevel
 from states.states_profile import ProfileStates
-from utils.analytics import track_event
+# from utils.analytics import track_event
 
 # Настройка логгера
 logger = logging.getLogger(__name__)

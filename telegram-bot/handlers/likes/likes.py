@@ -5,10 +5,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 from database.enums import Actions
-from database.queries import get_users_who_liked_me, save_user_interaction
+from database.queries import get_users_who_liked_me, save_user_interaction, track_event
 from handlers.start import start
 from states.states_likes import LikesStates
-from utils.analytics import track_event
+# from utils.analytics import track_event
 
 logger = logging.getLogger(__name__)
 router = Router()

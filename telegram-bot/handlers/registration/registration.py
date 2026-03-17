@@ -14,9 +14,10 @@ from handlers.registration.registration_keyboards import (
     make_keyboard_for_city, done_keyboard_for_city
 )
 from database.queries import *
+from database.queries import track_event
 from handlers.start import start
 from states.states_registration import RegistrationStates
-from utils.analytics import track_event
+# from utils.analytics import track_event
 from utils.jwt_generator import create_access_token
 
 # Инициализируем логгер
