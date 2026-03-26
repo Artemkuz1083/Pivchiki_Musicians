@@ -1,66 +1,43 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.py[cod]
-*.pyd
-*.egg
-*.egg-info/
-dist/
-build/
-*.log
-*.sqlite3
 
-# Virtual Environment
-.venv/
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.next
 
-# PyCharm / VSCode
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# If Packages have their independent repo
+# /packages
+
+# ignore log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .idea/
 .vscode/
-
-# Docker
-*.env
-docker-compose.override.yml
-*.pid
-*.sock
-
-# Byte-compiled / C extensions
-*.so
-
-# Distribution / Packaging
-.Python
-pip-wheel-metadata/
-*.egg-info/
-*.egg
-
-# macOS
+node_modules/
+build
 .DS_Store
-
-# Logs
-logs/
-*.log
-
-# Coverage
-htmlcov/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-*.h5
-*.pkl
-
-# Jupyter Notebook
-.ipynb_checkpoints/
-
-# MySQL / PostgreSQL
-*.sql
-*.dump
+*.tgz
+my-app*
+template/src/__tests__/__snapshots__/
+lerna-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/.changelog
+.npm/
+dist
