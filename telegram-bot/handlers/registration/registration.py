@@ -1,6 +1,7 @@
 import html
 import logging
 import os
+import time
 
 from aiogram import F, types, Router
 from aiogram.fsm.context import FSMContext
@@ -19,6 +20,8 @@ from handlers.start import start
 from states.states_registration import RegistrationStates
 # from utils.analytics import track_event
 from utils.jwt_generator import create_access_token
+from metrics.registration.counters import *
+from metrics.registration.histograms import *
 
 # Инициализируем логгер
 logger = logging.getLogger(__name__)
@@ -34,11 +37,21 @@ async def start_search(callback: types.CallbackQuery, state: FSMContext):
     await track_event(user_id, "registration_started")
     await state.set_state(RegistrationStates.name)
 
+    # [Метрика][Counter] Сколько начало регистрацию
+    registration_started.labels(source="bot").inc()
+
+    # [Метрика][Histogram] Время начало регистрации общее время
+    start_time = time.time()
+
+    await state.update_data(registration_start_time=start_time)
+
     # Редактируем сообщение, удаляя старую клавиатуру
     try:
         await callback.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
+
+
 
     # Отправляем новое сообщение с удалением реплай-клавиатуры
     await callback.message.answer(
@@ -59,6 +72,9 @@ async def start_search(callback: types.CallbackQuery, state: FSMContext):
 async def get_name(message: types.Message, state: FSMContext):
     name = message.text.strip()
     user_id = message.from_user.id
+
+    # [Метрика][Counter] Сколько дошло до введения имени
+    registration_username.labels(source="bot").inc()
 
     if name.startswith('/'):
         await message.answer("⚠️ Имя не может начинаться с символа <code>/</code>.\n<b>Введите ваше имя:</b>",
@@ -96,6 +112,9 @@ async def get_city(callback: types.CallbackQuery, state: FSMContext):
     city = callback.data.split("_")[1]
     await state.update_data(city=city)
 
+    # [Метрика][Counter] Сколько дошло до введения города
+    registration_city.labels(source="bot").inc()
+
     data = await state.get_data()
     user_id = data.get("user_id")  # Получаем user_id из FSM
 
@@ -132,9 +151,6 @@ async def own_city(message: types.Message, state: FSMContext):
                              parse_mode="HTML")
         return
 
-    data = await state.get_data()
-    # user_id = data.get("user_id") # уже определен из message.from_user.id
-
     try:
         await update_user_city(user_id, city)
     except Exception as e:
@@ -158,6 +174,9 @@ async def done_for_city(callback: types.CallbackQuery, state: FSMContext):
         logger.info("Пользователь %s подтвердил, что ввел город корректно", user_id)
         msg_text = "🎸 <b>Инструменты</b>\n\nВыберите инструмент/инструменты, которыми вы владеете:"
         markup = make_keyboard_for_instruments([])
+
+        # [Метрика][Counter] Сколько дошло до введения инструмента
+        registration_instrument.labels(source="bot").inc()
 
         await callback.message.answer(text=msg_text, reply_markup=markup, parse_mode="HTML")
         await state.set_state(RegistrationStates.instrument)
@@ -271,6 +290,10 @@ async def done_instruments(callback: types.CallbackQuery, state: FSMContext):
     try:
         user_from_db = await get_user(user_id)
         markup = get_instrument_rating(user_from_db.instruments)
+
+        # [Метрика][Counter] Сколько дошло до знаний об инструменте
+        registration_instrument_rating.labels(source="bot").inc()
+
         msg_text = "🎹 <b>Уровень владения</b>\n\nВыберите инструмент, который хотите оценить:"
 
         await callback.message.answer(text=msg_text, reply_markup=markup, parse_mode="HTML")
@@ -359,6 +382,9 @@ async def done_level_practice(callback: types.CallbackQuery, state: FSMContext):
 
     msg_text = "🎶 <b>Жанры</b>\n\nОтлично! Теперь выберите жанры, в которых вы играете:"
     markup = make_keyboard_for_genre([])
+
+    # [Метрика][Counter] Сколько дошло до жанров
+    registration_genre.labels(source="bot").inc()
 
     await callback.message.answer(text=msg_text, reply_markup=markup, parse_mode="HTML")
     await state.set_state(RegistrationStates.genre)
@@ -452,6 +478,9 @@ async def done_genre(callback: types.CallbackQuery, state: FSMContext):
         "чтобы с вами могли связаться другие музыканты:\n\n"
     )
 
+    # [Метрика][Counter] Сколько дошло до контактов
+    registration_contacts.labels(source="bot").inc()
+
     await callback.message.answer(text=msg_text, parse_mode="HTML")
 
     await state.set_state(RegistrationStates.contacts)
@@ -464,6 +493,11 @@ async def save_contacts(message: types.Message, state: FSMContext):
     contact_text = message.text.strip()
     user_id = message.from_user.id
     username = message.from_user.username
+    data = await state.get_data()
+    start_time = data.get("registration_start_time")
+    if start_time:
+        # [Метрика][Histogram] Время прохождения регистрации
+        registration_duration.labels(source="bot").observe(time.time() - start_time)
 
     logger.info("Пытаемся получить контакты пользователя %s", user_id)
 
@@ -493,6 +527,9 @@ async def save_contacts(message: types.Message, state: FSMContext):
         "Теперь вам доступен ваш профиль и поиск музыкантов.\n"
         "💡 <i>В приложении поиск работает быстрее и удобнее!</i>"
     )
+
+    # [Метрика][Counter] Сколько закончило регистрацию до конца
+    registration_success.labels(source="bot").inc()
 
     # Создаем клавиатуру
     builder = InlineKeyboardBuilder()

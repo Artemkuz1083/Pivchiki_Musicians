@@ -14,7 +14,9 @@ from database.session import init_db
 from handlers.show_profiles import show_profiles
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from prometheus_client import start_http_server
 
+start_http_server(8000, addr="0.0.0.0")
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
