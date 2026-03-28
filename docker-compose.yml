@@ -12,7 +12,6 @@
         - db
       volumes:
         - ./telegram-bot:/app
-        - ./metrics:/app/metrics
       ports:
         - "8000:8000"
 
