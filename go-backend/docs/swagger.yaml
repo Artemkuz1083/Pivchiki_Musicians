@@ -1,8 +1,86 @@
 basePath: /
 definitions:
+  delivery.AuthRequest:
+    properties:
+      login:
+        type: string
+      password:
+        type: string
+    type: object
+  delivery.AuthResponse:
+    properties:
+      is_profile_created:
+        type: boolean
+      token:
+        type: string
+    type: object
+  delivery.CreateProfile:
+    properties:
+      city:
+        type: string
+      contact:
+        type: string
+      genres:
+        items:
+          type: string
+        type: array
+      instruments:
+        items:
+          $ref: '#/definitions/delivery.Instrument'
+        type: array
+      isVisible:
+        type: boolean
+      userName:
+        type: string
+    type: object
   delivery.ErrorMsg:
     properties:
       message:
+        type: string
+    type: object
+  delivery.Instrument:
+    properties:
+      instrument:
+        type: string
+      instrumentProficiencyLevel:
+        type: integer
+    type: object
+  delivery.UpdateInstrument:
+    properties:
+      instrument:
+        type: string
+      instrumentProficiencyLevel:
+        type: integer
+    type: object
+  delivery.UpdateProfile:
+    properties:
+      aboutUser:
+        type: string
+      age:
+        type: integer
+      city:
+        type: string
+      contact:
+        type: string
+      genres:
+        items:
+          type: string
+        type: array
+      instruments:
+        items:
+          $ref: '#/definitions/delivery.UpdateInstrument'
+        type: array
+      isVisible:
+        type: boolean
+      link:
+        type: string
+      performanceExperience:
+        $ref: '#/definitions/domain.PerformanceExperience'
+      proficiencyLevel:
+        type: integer
+      theoryLevel:
+        type: integer
+      userName:
         type: string
     type: object
   domain.FullProfile:
@@ -31,9 +109,7 @@ definitions:
       link:
         type: string
       performancExperience:
-        type: string
-      proficiencyLevel:
-        type: integer
+        $ref: '#/definitions/domain.PerformanceExperience'
       theoryLevel:
         type: integer
       userName:
@@ -46,6 +122,19 @@ definitions:
       instrumentProficiencyLevel:
         type: integer
     type: object
+  domain.PerformanceExperience:
+    description: Уровень опыта выступлений
+    enum:
+    - NEVER
+    - LOCAL_GIGS
+    - TOURS
+    - PROFESSIONAL
+    type: string
+    x-enum-varnames:
+    - expNever
+    - expLocalGigs
+    - expTours
+    - expProfessional
 host: localhost:8080
 info:
   contact: {}
@@ -53,6 +142,63 @@ info:
   title: Pivchiki API
   version: "1.0"
 paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет учетные данные и возвращает токен + флаг наличия профиля.
+      parameters:
+      - description: Данные для входа
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/delivery.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/delivery.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+      summary: Вход в систему
+      tags:
+      - auth
+  /api/v1/auth/registry:
+    post:
+      consumes:
+      - application/json
+      description: Создает аккаунт и возвращает JWT токен. Поле is_profile_created
+        всегда false.
+      parameters:
+      - description: Данные для регистрации
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/delivery.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/delivery.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+      summary: Регистрация нового аккаунта
+      tags:
+      - auth
   /api/v1/profile:
     get:
       consumes:
@@ -77,7 +223,69 @@ paths:
       - ApiKeyAuth: []
       summary: Получить профиль текущего пользователя
       tags:
-      - profile
+      - userProfile
+    patch:
+      consumes:
+      - application/json
+      description: Возвращает полную информацию о профиле на основе ID из JWT токена
+      parameters:
+      - description: Данные для обновления
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/delivery.UpdateProfile'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешное получение профиля
+          schema:
+            $ref: '#/definitions/domain.FullProfile'
+        "400":
+          description: Профиль не найден
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+        "401":
+          description: Вы не авторизованы
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+      security:
+      - ApiKeyAuth: []
+      summary: Обновить один из параметров пользователя
+      tags:
+      - userProfile
+    post:
+      consumes:
+      - application/json
+      description: Создает запись в таблице users для текущего аккаунта
+      parameters:
+      - description: Данные для создания профиля
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/delivery.CreateProfile'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/delivery.CreateProfile'
+        "400":
+          description: Профиль не найден
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+        "401":
+          description: Вы не авторизованы
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+      security:
+      - ApiKeyAuth: []
+      summary: Создать профиль
+      tags:
+      - userProfile
 securityDefinitions:
   ApiKeyAuth:
     description: 'Введите JWT токен в формате: Bearer <ваш_токен>'

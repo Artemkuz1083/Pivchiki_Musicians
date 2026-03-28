@@ -9,6 +9,92 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
+        "/api/v1/auth/login": {
+            "post": {
+                "description": "Проверяет учетные данные и возвращает токен + флаг наличия профиля.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Вход в систему",
+                "parameters": [
+                    {
+                        "description": "Данные для входа",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/delivery.AuthRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.AuthResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/registry": {
+            "post": {
+                "description": "Создает аккаунт и возвращает JWT токен. Поле is_profile_created всегда false.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Регистрация нового аккаунта",
+                "parameters": [
+                    {
+                        "description": "Данные для регистрации",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/delivery.AuthRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.AuthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/profile": {
             "get": {
                 "security": [
@@ -24,9 +110,107 @@
                     "application/json"
                 ],
                 "tags": [
-                    "profile"
+                    "userProfile"
                 ],
                 "summary": "Получить профиль текущего пользователя",
+                "responses": {
+                    "200": {
+                        "description": "Успешное получение профиля",
+                        "schema": {
+                            "$ref": "#/definitions/domain.FullProfile"
+                        }
+                    },
+                    "400": {
+                        "description": "Профиль не найден",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    },
+                    "401": {
+                        "description": "Вы не авторизованы",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Создает запись в таблице users для текущего аккаунта",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "userProfile"
+                ],
+                "summary": "Создать профиль",
+                "parameters": [
+                    {
+                        "description": "Данные для создания профиля",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/delivery.CreateProfile"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.CreateProfile"
+                        }
+                    },
+                    "400": {
+                        "description": "Профиль не найден",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    },
+                    "401": {
+                        "description": "Вы не авторизованы",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Возвращает полную информацию о профиле на основе ID из JWT токена",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "userProfile"
+                ],
+                "summary": "Обновить один из параметров пользователя",
+                "parameters": [
+                    {
+                        "description": "Данные для обновления",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/delivery.UpdateProfile"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Успешное получение профиля",
@@ -51,10 +235,130 @@
         }
     },
     "definitions": {
+        "delivery.AuthRequest": {
+            "type": "object",
+            "properties": {
+                "login": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "delivery.AuthResponse": {
+            "type": "object",
+            "properties": {
+                "is_profile_created": {
+                    "type": "boolean"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "delivery.CreateProfile": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string"
+                },
+                "contact": {
+                    "type": "string"
+                },
+                "genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "instruments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/delivery.Instrument"
+                    }
+                },
+                "isVisible": {
+                    "type": "boolean"
+                },
+                "userName": {
+                    "type": "string"
+                }
+            }
+        },
         "delivery.ErrorMsg": {
             "type": "object",
             "properties": {
                 "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "delivery.Instrument": {
+            "type": "object",
+            "properties": {
+                "instrument": {
+                    "type": "string"
+                },
+                "instrumentProficiencyLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "delivery.UpdateInstrument": {
+            "type": "object",
+            "properties": {
+                "instrument": {
+                    "type": "string"
+                },
+                "instrumentProficiencyLevel": {
+                    "type": "integer"
+                }
+            }
+        },
+        "delivery.UpdateProfile": {
+            "type": "object",
+            "properties": {
+                "aboutUser": {
+                    "type": "string"
+                },
+                "age": {
+                    "type": "integer"
+                },
+                "city": {
+                    "type": "string"
+                },
+                "contact": {
+                    "type": "string"
+                },
+                "genres": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "instruments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/delivery.UpdateInstrument"
+                    }
+                },
+                "isVisible": {
+                    "type": "boolean"
+                },
+                "link": {
+                    "type": "string"
+                },
+                "performanceExperience": {
+                    "$ref": "#/definitions/domain.PerformanceExperience"
+                },
+                "proficiencyLevel": {
+                    "type": "integer"
+                },
+                "theoryLevel": {
+                    "type": "integer"
+                },
+                "userName": {
                     "type": "string"
                 }
             }
@@ -97,10 +401,7 @@
                     "type": "string"
                 },
                 "performancExperience": {
-                    "type": "string"
-                },
-                "proficiencyLevel": {
-                    "type": "integer"
+                    "$ref": "#/definitions/domain.PerformanceExperience"
                 },
                 "theoryLevel": {
                     "type": "integer"
@@ -120,6 +421,22 @@
                     "type": "integer"
                 }
             }
+        },
+        "domain.PerformanceExperience": {
+            "description": "Уровень опыта выступлений",
+            "type": "string",
+            "enum": [
+                "NEVER",
+                "LOCAL_GIGS",
+                "TOURS",
+                "PROFESSIONAL"
+            ],
+            "x-enum-varnames": [
+                "expNever",
+                "expLocalGigs",
+                "expTours",
+                "expProfessional"
+            ]
         }
     },
     "securityDefinitions": {

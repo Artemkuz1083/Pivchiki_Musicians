@@ -36,6 +36,7 @@
         - "5432:5432"
       volumes:
         - pg_:/var/lib/postgresql/data
+        - ./go-backend/init.sql:/docker-entrypoint-initdb.d/init.sql
 
     prometheus:
       image: prom/prometheus

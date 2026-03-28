@@ -14,19 +14,20 @@ import (
 type ProfileRepository interface {
 	GetProfile(profile domain.ProfileID) (*domain.FullProfile, error)
 	UpdateProfile(profile *domain.FullProfileToUpdate) error
+	CreateProfile(profile *domain.FullProfile) error
 }
 
 var _ ProfileRepository = (*ProfileRepositoryImpl)(nil)
 
 type ProfileRepositoryImpl struct {
 	queries *db.Queries
-	db    *pgxpool.Pool
+	db      *pgxpool.Pool
 }
 
-func NewInMemoryNoteRepository(queries *db.Queries, pool *pgxpool.Pool) *ProfileRepositoryImpl {
+func NewProfileRepository(queries *db.Queries, pool *pgxpool.Pool) *ProfileRepositoryImpl {
 	return &ProfileRepositoryImpl{
 		queries: queries,
-		db:    pool,
+		db:      pool,
 	}
 }
 
@@ -92,16 +93,16 @@ func (r *ProfileRepositoryImpl) UpdateProfile(profile *domain.FullProfileToUpdat
 	qtx := r.queries.WithTx(tx)
 
 	err = qtx.UpdateUserProfile(ctx, db.UpdateUserProfileParams{
-		ID: int64(profile.ID),
-		Name: ToText(profile.UserName),
-		City: ToText(profile.City),
-		Contacts: ToText(profile.Contact),
-		HasPerformanceExperience: ToText((*string)(profile.PerformancExperience)),
-		AboutMe: ToText(profile.AboutUser),
-		ExternalLink: ToText(profile.Link),
-		Age: ToInt4(profile.Age), 
+		ID:                        int64(profile.ID),
+		Name:                      ToText(profile.UserName),
+		City:                      ToText(profile.City),
+		Contacts:                  ToText(profile.Contact),
+		HasPerformanceExperience:  ToText((*string)(profile.PerformancExperience)),
+		AboutMe:                   ToText(profile.AboutUser),
+		ExternalLink:              ToText(profile.Link),
+		Age:                       ToInt4(profile.Age),
 		TheoreticalKnowledgeLevel: ToInt4(profile.TheoryLevel),
-		IsVisible: ToBool(profile.IsVisible), 
+		IsVisible:                 ToBool(profile.IsVisible),
 	})
 	if err != nil {
 		return err
@@ -114,41 +115,95 @@ func (r *ProfileRepositoryImpl) UpdateProfile(profile *domain.FullProfileToUpdat
 		}
 
 		for _, genreName := range *profile.Genres {
-            err = qtx.AddUserGenre(ctx, db.AddUserGenreParams{
-                UserID: int64(profile.ID),
-                Name:   genreName,
-            })
-            if err != nil {
-                return err
-            }
-        }
+			err = qtx.AddUserGenre(ctx, db.AddUserGenreParams{
+				UserID: int64(profile.ID),
+				Name:   genreName,
+			})
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	if profile.Instruments != nil {
-        err = qtx.DeleteUserInstruments(ctx, int64(profile.ID))
-        if err != nil {
-            return err
-        }
+		err = qtx.DeleteUserInstruments(ctx, int64(profile.ID))
+		if err != nil {
+			return err
+		}
 
-        for _, inst := range *profile.Instruments {
-            if inst == nil {
-                continue
-            }
-            
-            err = qtx.AddUserInstrument(ctx, db.AddUserInstrumentParams{
-                UserID:           int64(profile.ID),
-                Name:             stringFromPtr(inst.Instrument),
-                ProficiencyLevel: int32(uintFromPtr(inst.InstrumentProficiencyLevel)),
-            })
-            if err != nil {
-                return err
-            }
-        }
-    }
+		for _, inst := range *profile.Instruments {
+			if inst == nil {
+				continue
+			}
+
+			err = qtx.AddUserInstrument(ctx, db.AddUserInstrumentParams{
+				UserID:           int64(profile.ID),
+				Name:             stringFromPtr(inst.Instrument),
+				ProficiencyLevel: int32(uintFromPtr(inst.InstrumentProficiencyLevel)),
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	if err := tx.Commit(ctx); err != nil {
-        return err
-    }
+		return err
+	}
 
 	return nil
+}
+
+func (r *ProfileRepositoryImpl) CreateProfile(profile *domain.FullProfile) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := r.queries.WithTx(tx)
+
+	err = qtx.CreateUserProfile(ctx, db.CreateUserProfileParams{
+		ID:        int64(profile.ID),
+		Name:      ToText(&profile.UserName),
+		City:      ToText(&profile.City),
+		Contacts:  ToText(&profile.Contact),
+		IsVisible: profile.IsVisible,
+		// Остальные поля (Age, AboutMe и т.д.) полетят как NULL,
+		Age:                       ToInt4(profile.Age),
+		TheoreticalKnowledgeLevel: ToInt4(profile.TheoryLevel),
+		AboutMe:                   ToText(profile.AboutUser),
+		ExternalLink:              ToText(profile.Link),
+		HasPerformanceExperience:  ToText((*string)(profile.PerformancExperience)),
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, genre := range profile.Genres {
+		if err := qtx.AddUserGenre(ctx, db.AddUserGenreParams{
+			UserID: int64(profile.ID),
+			Name:   genre,
+		}); err != nil {
+			return err
+		}
+	}
+
+	for _, inst := range profile.Instruments {
+		if inst == nil {
+			continue
+		}
+		if err := qtx.AddUserInstrument(ctx, db.AddUserInstrumentParams{
+			UserID:           int64(profile.ID),
+			Name:             inst.Instrument,
+			ProficiencyLevel: int32(inst.InstrumentProficiencyLevel),
+		}); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }

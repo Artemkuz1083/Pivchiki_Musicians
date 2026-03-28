@@ -8,6 +8,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Account struct {
+	ID           int64
+	Login        string
+	PasswordHash string
+	CreatedAt    pgtype.Timestamptz
+}
+
 type Instrument struct {
 	ID               int32
 	UserID           int64
@@ -40,6 +47,6 @@ type UserLikesUser struct {
 	ID           int32
 	SwiperUserID int64
 	TargetUserID int64
-	Action       interface{}
+	Action       pgtype.Text
 	CreatedAt    pgtype.Timestamptz
 }

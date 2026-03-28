@@ -8,7 +8,6 @@ ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 def create_access_token(user_id: int, username: str = None):
     payload = {
         "user_id": user_id,
-        "username": username,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
         "iat": datetime.datetime.utcnow(),
     }

@@ -79,7 +79,6 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	if updateProfile.PerformancExperience != nil && !updateProfile.PerformancExperience.IsValid() {
 		msg := ErrorMsg{Message: "невалидное значение опыта исполнения"}
 		JSONError(w, msg, http.StatusBadRequest)
@@ -99,7 +98,6 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Println(*updateProfile.Age)
 	newProfile := &domain.FullProfileToUpdate{
 		ID:                   domain.ProfileID(userID),
 		UserName:             updateProfile.UserName,
@@ -123,4 +121,66 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderJSON(w, http.StatusOK, profile)
+}
+
+// CreateProfile godoc
+// @Summary      Создать профиль
+// @Description  Создает запись в таблице users для текущего аккаунта
+// @Tags         userProfile
+// @Accept       json
+// @Produce      json
+// @Param        body body CreateProfile true "Данные для создания профиля"
+// @Success      201  {object}  domain.FullProfile
+// @Failure      401  {object}  ErrorMsg            "Вы не авторизованы"
+// @Failure      400  {object}  ErrorMsg            "Профиль не найден"
+// @Security     ApiKeyAuth
+// @Router       /api/v1/profile [post]
+func (h *ProfileHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID, ok := ctx.Value("user_id").(uint64)
+	if !ok {
+		JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+		return
+	}
+
+	var input CreateProfile
+    if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+        JSONError(w, ErrorMsg{Message: "Ошибка декодирования: " + err.Error()}, http.StatusBadRequest)
+        return
+    }
+
+	domainInstruments := make([]*domain.Instrument, 0, len(input.Instruments))
+    for _, inst := range input.Instruments {
+        domainInstruments = append(domainInstruments, &domain.Instrument{
+            Instrument:                 inst.Instrument,
+            InstrumentProficiencyLevel: inst.InstrumentProficiencyLevel,
+        })
+    }
+
+	newProfile := &domain.FullProfile{
+        ID:                   domain.ProfileID(userID),
+        UserName:             input.UserName,
+        City:                 input.City,
+        Contact:              input.Contact,
+        IsVisible:            input.IsVisible,
+        Genres:               input.Genres,
+        Instruments:          domainInstruments,
+        PerformancExperience: nil,
+        Link:                 nil,
+        AboutUser:            nil,
+        Age:                  nil,
+        TheoryLevel:          nil,
+    }
+
+	if newProfile.Genres == nil {
+        newProfile.Genres = []string{}
+    }
+
+	profile, err := h.Service.CreateUserProfile(newProfile)
+    if err != nil {
+        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
+        return
+    }
+
+	renderJSON(w, http.StatusCreated, profile)
 }

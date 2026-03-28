@@ -6,6 +6,7 @@ import (
 )
 
 type ProfileService interface {
+	CreateUserProfile(profile *domain.FullProfile) (*domain.FullProfile, error)
 	GetUserProfile(id domain.ProfileID) (*domain.FullProfile, error)
 	UpdateUserProfile(profile *domain.FullProfileToUpdate) (*domain.FullProfile, error)
 }
@@ -45,4 +46,13 @@ func (s *ProfileServiceImpl) UpdateUserProfile(profile *domain.FullProfileToUpda
 	}
 
 	return newProfile, nil
+}
+
+func (s *ProfileServiceImpl) CreateUserProfile(profile *domain.FullProfile) (*domain.FullProfile, error) {
+    err := s.repo.CreateProfile(profile)
+    if err != nil {
+        return nil, err
+    }
+
+    return s.repo.GetProfile(profile.ID)
 }
