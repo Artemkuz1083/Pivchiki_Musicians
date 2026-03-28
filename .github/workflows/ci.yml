@@ -1,0 +1,32 @@
+name: Frontend CI (stub)
+
+on:
+  push:
+    branches:
+      - Frontend
+
+
+jobs:
+  frontend-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run linter (optional)
+        run: npm run lint || echo "No linter configured yet"
+
+      - name: Run tests (optional)
+        run: npm test || echo "No tests configured yet"
+
+      - name: Build project
+        run: npm run build || echo "No build step configured yet"
