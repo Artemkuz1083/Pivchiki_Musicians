@@ -172,7 +172,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/delivery.CreateProfile"
+                            "$ref": "#/definitions/domain.FullProfile"
                         }
                     },
                     "400": {
@@ -226,6 +226,58 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Профиль не найден",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    },
+                    "401": {
+                        "description": "Вы не авторизованы",
+                        "schema": {
+                            "$ref": "#/definitions/delivery.ErrorMsg"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/profile/feed": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Возвращает список случайных профилей для свайпов. Исключает профиль текущего пользователя.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "userProfile"
+                ],
+                "summary": "Получить ленту профилей",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Количество профилей (1-25)",
+                        "name": "limit",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список профилей",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.FullProfile"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Ошибка в запросе",
                         "schema": {
                             "$ref": "#/definitions/delivery.ErrorMsg"
                         }
@@ -357,9 +409,6 @@ const docTemplate = `{
                 },
                 "performanceExperience": {
                     "$ref": "#/definitions/domain.PerformanceExperience"
-                },
-                "proficiencyLevel": {
-                    "type": "integer"
                 },
                 "theoryLevel": {
                     "type": "integer"

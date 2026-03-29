@@ -15,6 +15,9 @@ WHERE login = $1 LIMIT 1;
 -- name: CheckAccountExists :one
 SELECT EXISTS(SELECT 1 FROM accounts WHERE login = $1);
 
+-- name: CheckProfileExists :one
+SELECT EXISTS(SELECT 1 FROM public.users WHERE id = $1);
+
 -- --- USER PROFILE QUERIES ---
 
 -- name: GetUser :one
@@ -22,6 +25,30 @@ SELECT EXISTS(SELECT 1 FROM accounts WHERE login = $1);
 SELECT id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible, photo_path, audio_path 
 FROM public.users
 WHERE id = $1 LIMIT 1;
+
+-- name: GetFeedProfiles :many
+SELECT 
+    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
+    u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
+    COALESCE(
+        (SELECT json_agg(ug.name) FROM user_genres ug WHERE ug.user_id = u.id), 
+        '[]'::json
+    ) as genres,
+    COALESCE(
+        (SELECT json_agg(json_build_object(
+            'name', i.name, 
+            'proficiency_level', i.proficiency_level
+        )) FROM instruments i WHERE i.user_id = u.id), 
+        '[]'::json
+    ) as instruments
+FROM public.users u
+WHERE u.id != $1 AND u.id NOT IN (
+    -- Тут в будущем будет подзапрос к таблице лайков/дизлайков
+    SELECT 0
+)
+AND u.is_visible = true
+ORDER BY RANDOM()
+LIMIT $2;
 
 -- name: CreateUserProfile :exec
 INSERT INTO users (id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible)

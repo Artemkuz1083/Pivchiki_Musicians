@@ -57,6 +57,17 @@ func (q *Queries) CheckAccountExists(ctx context.Context, login string) (bool, e
 	return exists, err
 }
 
+const checkProfileExists = `-- name: CheckProfileExists :one
+SELECT EXISTS(SELECT 1 FROM public.users WHERE id = $1)
+`
+
+func (q *Queries) CheckProfileExists(ctx context.Context, id int64) (bool, error) {
+	row := q.db.QueryRow(ctx, checkProfileExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createAccount = `-- name: CreateAccount :one
 
 
@@ -148,6 +159,84 @@ func (q *Queries) GetAccountByLogin(ctx context.Context, login string) (GetAccou
 	var i GetAccountByLoginRow
 	err := row.Scan(&i.ID, &i.Login, &i.PasswordHash)
 	return i, err
+}
+
+const getFeedProfiles = `-- name: GetFeedProfiles :many
+SELECT 
+    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
+    u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
+    COALESCE(
+        (SELECT json_agg(ug.name) FROM user_genres ug WHERE ug.user_id = u.id), 
+        '[]'::json
+    ) as genres,
+    COALESCE(
+        (SELECT json_agg(json_build_object(
+            'name', i.name, 
+            'proficiency_level', i.proficiency_level
+        )) FROM instruments i WHERE i.user_id = u.id), 
+        '[]'::json
+    ) as instruments
+FROM public.users u
+WHERE u.id != $1 AND u.id NOT IN (
+    -- Тут в будущем будет подзапрос к таблице лайков/дизлайков
+    SELECT 0
+)
+AND u.is_visible = true
+ORDER BY RANDOM()
+LIMIT $2
+`
+
+type GetFeedProfilesParams struct {
+	ID    int64
+	Limit int32
+}
+
+type GetFeedProfilesRow struct {
+	ID                        int64
+	Name                      pgtype.Text
+	City                      pgtype.Text
+	Age                       pgtype.Int4
+	Contacts                  pgtype.Text
+	TheoreticalKnowledgeLevel pgtype.Int4
+	HasPerformanceExperience  pgtype.Text
+	AboutMe                   pgtype.Text
+	ExternalLink              pgtype.Text
+	IsVisible                 bool
+	Genres                    interface{}
+	Instruments               interface{}
+}
+
+func (q *Queries) GetFeedProfiles(ctx context.Context, arg GetFeedProfilesParams) ([]GetFeedProfilesRow, error) {
+	rows, err := q.db.Query(ctx, getFeedProfiles, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFeedProfilesRow
+	for rows.Next() {
+		var i GetFeedProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.City,
+			&i.Age,
+			&i.Contacts,
+			&i.TheoreticalKnowledgeLevel,
+			&i.HasPerformanceExperience,
+			&i.AboutMe,
+			&i.ExternalLink,
+			&i.IsVisible,
+			&i.Genres,
+			&i.Instruments,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUser = `-- name: GetUser :one

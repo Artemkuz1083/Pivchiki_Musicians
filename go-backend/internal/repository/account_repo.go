@@ -12,7 +12,7 @@ import (
 type AccountRepository interface {
 	CreateAccount(account *domain.Account) (int64 ,error)
 	GetAccountByLogin(login string) (*domain.Account, error)
-	CheckAccountIsExist(login string) (bool, error)
+	CheckProfileExists(userID int64) (bool, error)
 }
 
 var _ AccountRepository = (*AccountRepositoryImpl)(nil)
@@ -62,14 +62,14 @@ func (r *AccountRepositoryImpl) GetAccountByLogin(login string) (*domain.Account
 
 //TODO сделать чтобы проверял профиль а не акканут
 // проверить что айди ака и профился одинаковые
-func (r *AccountRepositoryImpl) CheckAccountIsExist(login string) (bool, error) {
+func (r *AccountRepositoryImpl) CheckProfileExists(userID int64) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	isExist, err := r.queries.CheckAccountExists(ctx, login)
+	exists, err := r.queries.CheckProfileExists(ctx, userID)
     if err != nil {
         return false, err
     }
 
-	return isExist, nil
+	return exists, nil
 }

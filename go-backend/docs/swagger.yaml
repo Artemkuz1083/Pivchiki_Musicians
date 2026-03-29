@@ -76,8 +76,6 @@ definitions:
         type: string
       performanceExperience:
         $ref: '#/definitions/domain.PerformanceExperience'
-      proficiencyLevel:
-        type: integer
       theoryLevel:
         type: integer
       userName:
@@ -272,7 +270,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/delivery.CreateProfile'
+            $ref: '#/definitions/domain.FullProfile'
         "400":
           description: Профиль не найден
           schema:
@@ -284,6 +282,40 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Создать профиль
+      tags:
+      - userProfile
+  /api/v1/profile/feed:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список случайных профилей для свайпов. Исключает профиль
+        текущего пользователя.
+      parameters:
+      - description: Количество профилей (1-25)
+        in: query
+        name: limit
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список профилей
+          schema:
+            items:
+              $ref: '#/definitions/domain.FullProfile'
+            type: array
+        "400":
+          description: Ошибка в запросе
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+        "401":
+          description: Вы не авторизованы
+          schema:
+            $ref: '#/definitions/delivery.ErrorMsg'
+      security:
+      - ApiKeyAuth: []
+      summary: Получить ленту профилей
       tags:
       - userProfile
 securityDefinitions:
