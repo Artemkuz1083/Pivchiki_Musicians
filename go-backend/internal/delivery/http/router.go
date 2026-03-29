@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	_ "github.com/katrinani/pivchiki-bot/backend/docs"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -35,14 +36,18 @@ func AuthRouter(handler *AuthHandler) http.Handler {
 }
 
 func NewAppRouter(profileHandler *ProfileHandler, authHandler *AuthHandler) http.Handler {
-	mux := http.NewServeMux()
+    apiMux := http.NewServeMux()
+    
+    apiMux.Handle("/api/v1/profile", AuthMiddleWare(ProfileRouter(profileHandler)))
+    apiMux.Handle("/api/v1/profile/", http.StripPrefix("/api/v1/profile", AuthMiddleWare(FeedRouter(profileHandler))))
+    apiMux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", AuthRouter(authHandler)))
 
-	mux.Handle("/swagger/", httpSwagger.WrapHandler)
-	
-	mux.Handle("/api/v1/profile", AuthMiddleWare(ProfileRouter(profileHandler)))
+    mainMux := http.NewServeMux()
 
-	mux.Handle("/api/v1/profile/", http.StripPrefix("/api/v1/profile", AuthMiddleWare(FeedRouter(profileHandler))))
-	mux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", AuthRouter(authHandler)))
+    mainMux.Handle("/swagger/", httpSwagger.WrapHandler)
+    mainMux.Handle("/metrics", promhttp.Handler())
 
-	return mux
+    mainMux.Handle("/api/v1/", MetricsMiddleware(apiMux))
+
+    return mainMux
 }

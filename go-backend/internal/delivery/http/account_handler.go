@@ -38,7 +38,6 @@ func (h *AuthHandler) Registry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//TODO валидация имени и пароля
-
 	token, err := h.Service.Registry(&domain.Account{
 		Login:        req.Login,
 		PasswordHash: req.Password,

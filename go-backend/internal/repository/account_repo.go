@@ -60,8 +60,6 @@ func (r *AccountRepositoryImpl) GetAccountByLogin(login string) (*domain.Account
     }, nil
 }
 
-//TODO сделать чтобы проверял профиль а не акканут
-// проверить что айди ака и профился одинаковые
 func (r *AccountRepositoryImpl) CheckProfileExists(userID int64) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
