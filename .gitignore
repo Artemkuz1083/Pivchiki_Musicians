@@ -62,5 +62,4 @@ coverage.xml
 .ipynb_checkpoints/
 
 # MySQL / PostgreSQL
-*.sql
 *.dump

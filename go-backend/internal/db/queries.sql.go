@@ -12,7 +12,9 @@ import (
 )
 
 const addUserGenre = `-- name: AddUserGenre :exec
-INSERT INTO user_genres (user_id, name) VALUES ($1, $2)
+
+INSERT INTO user_genres (user_id, name) 
+VALUES ($1, $2)
 `
 
 type AddUserGenreParams struct {
@@ -20,13 +22,16 @@ type AddUserGenreParams struct {
 	Name   string
 }
 
+// --- GENRES ---
 func (q *Queries) AddUserGenre(ctx context.Context, arg AddUserGenreParams) error {
 	_, err := q.db.Exec(ctx, addUserGenre, arg.UserID, arg.Name)
 	return err
 }
 
 const addUserInstrument = `-- name: AddUserInstrument :exec
-INSERT INTO instruments (user_id, name, proficiency_level) VALUES ($1, $2, $3)
+
+INSERT INTO instruments (user_id, name, proficiency_level) 
+VALUES ($1, $2, $3)
 `
 
 type AddUserInstrumentParams struct {
@@ -35,8 +40,87 @@ type AddUserInstrumentParams struct {
 	ProficiencyLevel int32
 }
 
+// --- INSTRUMENTS ---
 func (q *Queries) AddUserInstrument(ctx context.Context, arg AddUserInstrumentParams) error {
 	_, err := q.db.Exec(ctx, addUserInstrument, arg.UserID, arg.Name, arg.ProficiencyLevel)
+	return err
+}
+
+const checkAccountExists = `-- name: CheckAccountExists :one
+SELECT EXISTS(SELECT 1 FROM accounts WHERE login = $1)
+`
+
+func (q *Queries) CheckAccountExists(ctx context.Context, login string) (bool, error) {
+	row := q.db.QueryRow(ctx, checkAccountExists, login)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkProfileExists = `-- name: CheckProfileExists :one
+SELECT EXISTS(SELECT 1 FROM public.users WHERE id = $1)
+`
+
+func (q *Queries) CheckProfileExists(ctx context.Context, id int64) (bool, error) {
+	row := q.db.QueryRow(ctx, checkProfileExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const createAccount = `-- name: CreateAccount :one
+
+
+INSERT INTO accounts (login, password_hash)
+VALUES ($1, $2)
+RETURNING id
+`
+
+type CreateAccountParams struct {
+	Login        string
+	PasswordHash string
+}
+
+// queries.sql
+// --- AUTH QUERIES ---
+func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createAccount, arg.Login, arg.PasswordHash)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createUserProfile = `-- name: CreateUserProfile :exec
+INSERT INTO users (id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`
+
+type CreateUserProfileParams struct {
+	ID                        int64
+	Name                      pgtype.Text
+	City                      pgtype.Text
+	Age                       pgtype.Int4
+	Contacts                  pgtype.Text
+	TheoreticalKnowledgeLevel pgtype.Int4
+	HasPerformanceExperience  pgtype.Text
+	AboutMe                   pgtype.Text
+	ExternalLink              pgtype.Text
+	IsVisible                 bool
+}
+
+func (q *Queries) CreateUserProfile(ctx context.Context, arg CreateUserProfileParams) error {
+	_, err := q.db.Exec(ctx, createUserProfile,
+		arg.ID,
+		arg.Name,
+		arg.City,
+		arg.Age,
+		arg.Contacts,
+		arg.TheoreticalKnowledgeLevel,
+		arg.HasPerformanceExperience,
+		arg.AboutMe,
+		arg.ExternalLink,
+		arg.IsVisible,
+	)
 	return err
 }
 
@@ -58,11 +142,111 @@ func (q *Queries) DeleteUserInstruments(ctx context.Context, userID int64) error
 	return err
 }
 
+const getAccountByLogin = `-- name: GetAccountByLogin :one
+SELECT id, login, password_hash 
+FROM accounts 
+WHERE login = $1 LIMIT 1
+`
+
+type GetAccountByLoginRow struct {
+	ID           int64
+	Login        string
+	PasswordHash string
+}
+
+func (q *Queries) GetAccountByLogin(ctx context.Context, login string) (GetAccountByLoginRow, error) {
+	row := q.db.QueryRow(ctx, getAccountByLogin, login)
+	var i GetAccountByLoginRow
+	err := row.Scan(&i.ID, &i.Login, &i.PasswordHash)
+	return i, err
+}
+
+const getFeedProfiles = `-- name: GetFeedProfiles :many
+SELECT 
+    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
+    u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
+    COALESCE(
+        (SELECT json_agg(ug.name) FROM user_genres ug WHERE ug.user_id = u.id), 
+        '[]'::json
+    ) as genres,
+    COALESCE(
+        (SELECT json_agg(json_build_object(
+            'name', i.name, 
+            'proficiency_level', i.proficiency_level
+        )) FROM instruments i WHERE i.user_id = u.id), 
+        '[]'::json
+    ) as instruments
+FROM public.users u
+WHERE u.id != $1 AND u.id NOT IN (
+    -- Тут в будущем будет подзапрос к таблице лайков/дизлайков
+    SELECT 0
+)
+AND u.is_visible = true
+ORDER BY RANDOM()
+LIMIT $2
+`
+
+type GetFeedProfilesParams struct {
+	ID    int64
+	Limit int32
+}
+
+type GetFeedProfilesRow struct {
+	ID                        int64
+	Name                      pgtype.Text
+	City                      pgtype.Text
+	Age                       pgtype.Int4
+	Contacts                  pgtype.Text
+	TheoreticalKnowledgeLevel pgtype.Int4
+	HasPerformanceExperience  pgtype.Text
+	AboutMe                   pgtype.Text
+	ExternalLink              pgtype.Text
+	IsVisible                 bool
+	Genres                    interface{}
+	Instruments               interface{}
+}
+
+func (q *Queries) GetFeedProfiles(ctx context.Context, arg GetFeedProfilesParams) ([]GetFeedProfilesRow, error) {
+	rows, err := q.db.Query(ctx, getFeedProfiles, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFeedProfilesRow
+	for rows.Next() {
+		var i GetFeedProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.City,
+			&i.Age,
+			&i.Contacts,
+			&i.TheoreticalKnowledgeLevel,
+			&i.HasPerformanceExperience,
+			&i.AboutMe,
+			&i.ExternalLink,
+			&i.IsVisible,
+			&i.Genres,
+			&i.Instruments,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUser = `-- name: GetUser :one
-SELECT id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible, photo_path, audio_path FROM public.users
+
+SELECT id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible, photo_path, audio_path 
+FROM public.users
 WHERE id = $1 LIMIT 1
 `
 
+// --- USER PROFILE QUERIES ---
 // Получение одного профиля по ID
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	row := q.db.QueryRow(ctx, getUser, id)

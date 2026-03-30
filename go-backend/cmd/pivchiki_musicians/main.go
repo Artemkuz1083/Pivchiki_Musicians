@@ -4,10 +4,12 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/katrinani/pivchiki-bot/backend/internal/db"
 	delivery "github.com/katrinani/pivchiki-bot/backend/internal/delivery/http"
+	"github.com/katrinani/pivchiki-bot/backend/internal/metrics"
 	"github.com/katrinani/pivchiki-bot/backend/internal/repository"
 	"github.com/katrinani/pivchiki-bot/backend/internal/service"
 )
@@ -30,16 +32,18 @@ func main() {
 		log.Fatal(err)
 	}
 	defer pool.Close()
-
 	queries := db.New(pool)
 
-	repo := repository.NewInMemoryNoteRepository(queries, pool)
+	profileRepo := repository.NewProfileRepository(queries, pool)
+	accountRepo := repository.NewAccountRepository(queries, pool)
 
-	service := service.NewProfileService(repo)
+	profileService := service.NewProfileService(profileRepo)
+	accountService := service.NewAccountService(accountRepo)
 
-	handler := delivery.NewProfileHandler(service)
+	profileHandler := delivery.NewProfileHandler(profileService)
+	authHandler := delivery.NewAuthHandler(accountService)
 
-	router := delivery.NewAppRouter(handler)
+	router := delivery.NewAppRouter(profileHandler, authHandler)
 
 	log.Println("Сервер запускается на порту :8080...")
 	const addr = ":8080"
@@ -47,6 +51,11 @@ func main() {
 		Addr:    addr,
 		Handler: router,
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	worker := metrics.NewMetricsWorker(pool, 1*time.Minute)
+	go worker.Run(ctx)
 
 	server.ListenAndServe()
 }
