@@ -74,12 +74,11 @@ def get_profile_selection_keyboard(user_id: int, username: str) -> InlineKeyboar
     base_url = os.getenv("APP_EXTERNAL_URL")
     token = create_access_token(user_id, username)
 
-    WEB_APP_URL = f"{base_url}/api/v1/profile?token={token}"
     logger.info(f"Токен пользователя {base_url}/api/v1/profile?token={token}")
 
     builder.row(InlineKeyboardButton(
         text="🔍 Открыть Web App",
-        web_app=WebAppInfo(url=WEB_APP_URL)
+        web_app=WebAppInfo(url=base_url)
     ))
 
     builder.add(
