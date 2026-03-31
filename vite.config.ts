@@ -20,7 +20,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://milo-subdiscoid-ryder.ngrok-free.dev',
+        target: 'https://__________.ngrok-free.dev',
         changeOrigin: true,
         secure: false,
       }

@@ -1,3 +1,4 @@
+// types.ts (обновленный)
 export type SkillLevel = number; 
 
 export const SKILL_LEVELS = [
@@ -29,55 +30,57 @@ export interface UserProfile {
   TheoryLevel: number; 
 }
 
+// Новый DTO для создания профиля (POST /api/v1/profile)
+// Согласно Swagger, здесь нет ID, AboutUser, Age, Link, PerformancExperience, TheoryLevel, IsVisible
+export interface CreateProfileDto {
+  UserName: string; 
+  City: string; 
+  Contact: string; 
+  Genres: string[]; 
+  Instruments: InstrumentSkill[]; 
+  // Другие поля, если они требуются бэкендом при создании
+}
+
+// DTO для обновления профиля (предположительно PATCH /api/v1/profile)
+// Если PATCH нет, то этот DTO будет не нужен или придется использовать POST для обновления
+export interface UpdateProfileDto {
+  UserName?: string; 
+  AboutUser?: string; 
+  Age?: number; 
+  City?: string; 
+  Contact?: string; 
+  Genres?: string[]; 
+  Instruments?: InstrumentSkill[]; // Используем InstrumentSkill
+  IsVisible?: boolean; 
+  Link?: string; 
+  PerformancExperience?: PerformancEexperience; 
+  TheoryLevel?: number; 
+}
+
+// DTO для запроса авторизации/регистрации
+export interface AuthRequestDto {
+  login: string;
+  password: string;
+}
+
+// DTO для ответа авторизации/регистрации
+export interface AuthResponseDto {
+  is_profile_created: boolean;
+  token: string;
+}
+
 export const CITIES = [
-  'Москва',
-  'Санкт-Петербург',
-  'Новосибирск',
-  'Екатеринбург',
-  'Казань',
-  'Нижний Новгород',
-  'Челябинск',
-  'Самара',
-  'Омск',
-  'Ростов-на-Дону',
-  'Уфа',
-  'Красноярск',
-  'Воронеж',
-  'Пермь',
-  'Волгоград',
+  'Москва', 'Санкт-Петербург', 'Новосибирск', 'Екатеринбург', 'Казань', 'Нижний Новгород', 
+  'Челябинск', 'Самара', 'Омск', 'Ростов-на-Дону', 'Уфа', 'Красноярск', 'Воронеж', 
+  'Пермь', 'Волгоград',
 ];
 
 export const INSTRUMENTS = [
-  'Гитара',
-  'Бас-гитара',
-  'Барабаны',
-  'Клавишные',
-  'Вокал',
-  'Скрипка',
-  'Саксофон',
-  'Труба',
-  'Фортепиано',
-  'Укулеле',
-  'Синтезатор',
-  'DJ/Диджеинг',
+  'Гитара', 'Бас-гитара', 'Барабаны', 'Клавишные', 'Вокал', 'Скрипка', 'Саксофон', 
+  'Труба', 'Фортепиано', 'Укулеле', 'Синтезатор', 'DJ/Диджеинг',
 ];
 
 export const GENRES = [
-  'Рок',
-  'Поп',
-  'Джаз',
-  'Блюз',
-  'Классика',
-  'Металл',
-  'Панк',
-  'Хип-хоп',
-  'Электронная музыка',
-  'Фолк',
-  'Кантри',
-  'Инди',
-  'Регги',
-  'Фанк',
-  'Соул',
-  'R&B',
+  'Рок', 'Поп', 'Джаз', 'Блюз', 'Классика', 'Металл', 'Панк', 'Хип-хоп', 
+  'Электронная музыка', 'Фолк', 'Кантри', 'Инди', 'Регги', 'Фанк', 'Соул', 'R&B',
 ];
-
