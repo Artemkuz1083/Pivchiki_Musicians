@@ -4,6 +4,7 @@ import { User, Search, Filter, X, Heart, Loader2 } from 'lucide-react';
 import { BrowseCard } from '../components/BrowseCard';
 import { UserProfile } from '../types';
 import { MOCK_PROFILES } from '../../data/mockProfiles'; 
+import { useAuth } from '../../context/AuthContext';
 
 export function Browse() {
   const navigate = useNavigate();
@@ -11,6 +12,8 @@ export function Browse() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const { isLoggedIn } = useAuth(); // Достаем статус из контекста
+
 
   useEffect(() => {
     const fetchFeed = async () => {
@@ -78,73 +81,77 @@ export function Browse() {
 
   const currentProfile = profiles[currentIndex];
 
-  return (
-    <div className="min-h-screen bg-[#F8F9FD] flex flex-col">
-      {/* Хедер */}
-      <header className="bg-[#60519B] text-white p-4 sticky top-0 z-20 shadow-lg">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-center justify-between mb-3">
-            <h1 className="text-xl font-bold tracking-tight">Музыканты</h1>
-            <button 
-              onClick={() => navigate('/profile')} 
-              className="p-2 hover:bg-white/10 rounded-full transition-colors"
-            >
-              <User className="w-6 h-6" />
-            </button>
-          </div>
-          
-          <div className="flex gap-2">
-            <div className="flex-1 bg-white rounded-2xl px-4 py-2.5 flex items-center gap-2 shadow-inner">
-              <Search className="w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Поиск по инструментам..."
-                className="flex-1 outline-none text-gray-900 bg-transparent text-sm"
-              />
+return (
+  <div className="min-h-screen bg-[#F8F9FD] flex flex-col">
+    {/* Хедер (код хедера остается прежним) */}
+    
+    <main className="flex-1 flex flex-col items-center justify-center p-4 gap-6">
+      <div className="w-full max-w-[380px]">
+        
+        {isLoggedIn ? (
+          /* ВАРИАНТ 1: ПОЛНАЯ КАРТОЧКА (ДЛЯ АВТОРИЗОВАННЫХ) */
+          <div className="animate-in fade-in zoom-in duration-300">
+            <BrowseCard 
+              profile={currentProfile} 
+              imageUrl={`https://picsum.photos/seed/${currentProfile.ID}/600/800`}
+            />
+
+            <div className="flex gap-4 mt-6">
+              <button 
+                onClick={handleNext}
+                className="flex-1 h-16 bg-white rounded-3xl flex items-center justify-center text-gray-400 shadow-xl hover:text-red-500 transition-all active:scale-95 border border-gray-100"
+              >
+                <X size={32} strokeWidth={3} />
+              </button>
+              <button 
+                onClick={handleLike}
+                className="flex-1 h-16 bg-[#60519B] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-purple-200 hover:bg-[#4d3f7e] transition-all active:scale-95"
+              >
+                <Heart size={32} strokeWidth={3} fill="currentColor" />
+              </button>
             </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`bg-white/20 backdrop-blur-md text-white rounded-2xl px-4 py-2 transition-all ${showFilters ? 'bg-white/40' : ''}`}
-            >
-              <Filter className="w-5 h-5" />
-            </button>
           </div>
-        </div>
-      </header>
+        ) : (
+          /* ВАРИАНТ 2: ПРЕДПРОСМОТР (ДЛЯ ГОСТЕЙ) */
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+            {/* Контейнер с размытым фото для затравки */}
+            <div className="relative h-[200px] w-full rounded-[2rem] overflow-hidden grayscale opacity-40">
+               <img 
+                src={`https://picsum.photos/seed/${currentProfile.ID}/600/400`} 
+                className="w-full h-full object-cover blur-md" 
+                alt="Locked profile"
+               />
+               <div className="absolute inset-0 flex items-center justify-center">
+                 <Lock className="text-white w-12 h-12 opacity-50" />
+               </div>
+            </div>
 
-      {/* Основной контент (Карточка) */}
-      <main className="flex-1 flex flex-col items-center justify-center p-4 gap-6">
-        <div className="w-full max-w-[380px]">
-          <BrowseCard 
-            profile={currentProfile} 
-            // Используем ID для генерации уникальной картинки, пока нет реальных фото
-            imageUrl={`https://picsum.photos/seed/${currentProfile.ID}/600/800`}
-          />
-
-          {/* Кнопки управления */}
-          <div className="flex gap-4 mt-6">
-            <button 
-              onClick={handleNext}
-              className="flex-1 h-16 bg-white rounded-3xl flex items-center justify-center text-gray-400 shadow-xl hover:text-red-500 transition-all active:scale-95 border border-gray-100"
-              title="Пропустить"
-            >
-              <X size={32} strokeWidth={3} />
-            </button>
-            <button 
-              onClick={handleLike}
-              className="flex-1 h-16 bg-[#60519B] rounded-3xl flex items-center justify-center text-white shadow-xl shadow-purple-200 hover:bg-[#4d3f7e] transition-all active:scale-95"
-              title="В группу!"
-            >
-              <Heart size={32} strokeWidth={3} fill="currentColor" />
-            </button>
+            <PublicPreviewCard profile={currentProfile} />
+            
+            <div className="bg-white/80 backdrop-blur-sm p-6 rounded-3xl border border-dashed border-[#60519B]/30 text-center shadow-sm">
+              <p className="text-gray-600 text-sm mb-4">
+                Хотите увидеть больше информации и связаться с этим музыкантом?
+              </p>
+              <button 
+                onClick={() => navigate('/registration')}
+                className="w-full py-4 bg-[#60519B] text-white rounded-2xl font-bold shadow-lg shadow-[#60519B]/20 hover:scale-[1.02] transition-transform active:scale-95"
+              >
+                Зарегистрироваться
+              </button>
+              <button 
+                onClick={handleNext}
+                className="mt-4 text-[#60519B] text-xs font-bold uppercase tracking-widest opacity-60 hover:opacity-100 transition-opacity"
+              >
+                Посмотреть следующего гостя
+              </button>
+            </div>
           </div>
-        </div>
-      </main>
+        )}
+      </div>
+    </main>
 
-      {/* Футер с краткой статистикой */}
-      <footer className="p-6 text-center text-gray-300 text-[10px] font-bold uppercase tracking-widest">
-        Найдено в городе {currentProfile.City}: {profiles.filter(p => p.City === currentProfile.City).length}
-      </footer>
-    </div>
-  );
-}
+    <footer className="p-6 text-center text-gray-300 text-[10px] font-bold uppercase tracking-widest">
+      Найдено в городе {currentProfile.City}: {profiles.filter(p => p.City === currentProfile.City).length}
+    </footer>
+  </div>
+);
