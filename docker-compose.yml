@@ -7,5 +7,3 @@ services:
     ports:
       - '5173:80'
     restart: always
-    depends_on:
-      - backend
