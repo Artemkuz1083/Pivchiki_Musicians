@@ -1,32 +1,37 @@
-name: Frontend CI (stub)
+name: Frontend CI/CD
 
 on:
   push:
     branches:
       - Frontend
 
-
 jobs:
-  frontend-ci:
-    runs-on: ubuntu-latest
+  build-and-deploy:
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Build docker image
+        run: docker build -t my-frontend.
+
+      - name: Login to DockerHub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Push image
+        run: |
+          docker tag my-frontend username/my-frontend:latest
+          docker push username/my-frontend:latest
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
         with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run linter (optional)
-        run: npm run lint || echo "No linter configured yet"
-
-      - name: Run tests (optional)
-        run: npm test || echo "No tests configured yet"
-
-      - name: Build project
-        run: npm run build || echo "No build step configured yet"
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            docker pull username/my-frontend:latest
+            docker stop frontend || true
+            docker rm frontend || true
+            docker run -d -p 3000:80 --name frontend username/my-frontend:latest
