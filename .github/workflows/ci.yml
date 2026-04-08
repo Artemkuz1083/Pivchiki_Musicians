@@ -40,7 +40,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 10022
           script: |
-            cd pivchiki/frontend/
+            cd pivchiki
             docker compose pull
             docker compose up -d
             docker image prune -f
