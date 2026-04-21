@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { User, Search, Filter, X, Heart, Loader2 } from 'lucide-react'
 import { BrowseCard } from '../components/BrowseCard'
-import { UserProfile } from '../types'
+import { PerformancEexperience, UserProfile } from '../types'
 import { MOCK_PROFILES } from '../../data/mockProfiles'
 import { useAuth } from '../../context/AuthContext'
 import { Lock } from 'lucide-react' // для иконки замка
 import { PublicPreviewCard } from '../components/PublicPreviewCard' // путь проверь по проекту
+import { FilterSheet } from './FilterSheet'
 
 export function Browse() {
 	const navigate = useNavigate()
@@ -15,7 +16,13 @@ export function Browse() {
 	const [isLoading, setIsLoading] = useState(true)
 	const [showFilters, setShowFilters] = useState(false)
 	const { isLoggedIn } = useAuth() // Достаем статус из контекста
-
+	const [filters, setFilters] = useState({
+        city: '',
+        minSkill: 0,
+        experience: [] as PerformancEexperience[],
+        genres: [] as string[]
+    })
+	
 	useEffect(() => {
 		const fetchFeed = async () => {
 			try {
@@ -36,7 +43,7 @@ export function Browse() {
 
 	// Логика переключения карточек
 	const handleNext = () => {
-		if (currentIndex < profiles.length - 1) {
+		if (currentIndex < filteredProfiles.length - 1) {
 			setCurrentIndex(prev => prev + 1)
 		} else {
 			// Если карточки кончились, можно либо загрузить новые, либо зациклить
@@ -85,7 +92,27 @@ export function Browse() {
 		)
 	}
 
-	const currentProfile = profiles[currentIndex]
+	const filteredProfiles = profiles.filter(profile => {
+    // Фильтр по городу
+    if (filters.city && profile.City !== filters.city) return false;
+
+    // Фильтр по уровню (хотя бы один инструмент должен быть >= minSkill)
+    if (filters.minSkill > 0) {
+        const hasSkill = profile.Instruments?.some(
+            i => i.InstrumentProficiencyLevel >= filters.minSkill
+        );
+        if (!hasSkill) return false;
+    }
+
+    // Фильтр по опыту
+    if (filters.experience.length > 0 && !filters.experience.includes(profile.PerformancExperience)) {
+        return false;
+    }
+
+    return true;
+	});
+
+	const currentProfile = filteredProfiles[currentIndex];
 
 	return (
 		<div className='min-h-screen bg-[#F8F9FD] flex flex-col'>
@@ -160,6 +187,12 @@ export function Browse() {
 				Найдено в городе {currentProfile.City}:{' '}
 				{profiles.filter(p => p.City === currentProfile.City).length}
 			</footer>
+			<FilterSheet 
+        		isOpen={showFilters} 
+        		onClose={() => setShowFilters(false)} 
+        		filters={filters} 
+        		setFilters={setFilters} 
+    		/>
 		</div>
 	)
 }
