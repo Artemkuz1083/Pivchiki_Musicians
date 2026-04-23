@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/katrinani/pivchiki-bot/backend/internal/db"
 	"github.com/katrinani/pivchiki-bot/backend/internal/domain"
@@ -16,7 +17,9 @@ type ProfileRepository interface {
 	GetProfile(profile domain.ProfileID) (*domain.FullProfile, error)
 	UpdateProfile(profile *domain.FullProfileToUpdate) error
 	CreateProfile(profile *domain.FullProfile) error
-	GetFeedProfiles(profile domain.ProfileID, limit int) ([]*domain.FullProfile, error)
+	GetFeedProfiles(profile domain.ProfileID, limit int, filters *domain.ProfileFilters) ([]*domain.FullProfile, error)
+	GetPublicFeed(limit int) ([]*domain.FullProfile, error)
+	AddInteraction(swiper, target domain.ProfileID, action string) (bool, error)
 }
 
 var _ ProfileRepository = (*ProfileRepositoryImpl)(nil)
@@ -72,6 +75,8 @@ func (r *ProfileRepositoryImpl) GetProfile(id domain.ProfileID) (*domain.FullPro
 		PerformancExperience: ToPerformanceEx(user.HasPerformanceExperience),
 		Link:                 textToPtr(user.ExternalLink),
 		AboutUser:            textToPtr(user.AboutMe),
+		PhotoURL:             textToPtr(user.PhotoPath),
+		AudioURL:             textToPtr(user.AudioPath),
 		Age:                  int4ToUintPtr(user.Age),
 		TheoryLevel:          int4ToUintPtr(user.TheoreticalKnowledgeLevel),
 		Genres:               genres,
@@ -106,6 +111,8 @@ func (r *ProfileRepositoryImpl) UpdateProfile(profile *domain.FullProfileToUpdat
 		Contacts:                  ToText(profile.Contact),
 		HasPerformanceExperience:  ToText((*string)(profile.PerformancExperience)),
 		AboutMe:                   ToText(profile.AboutUser),
+		PhotoPath:                 ToText(profile.PhotoPath),
+		AudioPath:                 ToText(profile.AudioPath),
 		ExternalLink:              ToText(profile.Link),
 		Age:                       ToInt4(profile.Age),
 		TheoreticalKnowledgeLevel: ToInt4(profile.TheoryLevel),
@@ -235,71 +242,195 @@ func (r *ProfileRepositoryImpl) CreateProfile(profile *domain.FullProfile) error
 	return nil
 }
 
-func (r *ProfileRepositoryImpl) GetFeedProfiles(id domain.ProfileID, limit int) ([]*domain.FullProfile, error) {
+func (r *ProfileRepositoryImpl) GetFeedProfiles(id domain.ProfileID, limit int, filters *domain.ProfileFilters) ([]*domain.FullProfile, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	log.Printf("[REPO:GetFeed] Получение ленты для ID: %d, limit: %d", id, limit)
-	dbRows, err := r.queries.GetFeedProfiles(ctx, db.GetFeedProfilesParams{
-		ID:    int64(id),
-		Limit: int32(limit),
-	})
+	cities := filters.Cities
+	if cities == nil {
+		cities = []string{}
+	}
+
+	genres := filters.Genres
+	if genres == nil {
+		genres = []string{}
+	}
+
+	instruments := filters.Instruments
+	if instruments == nil {
+		instruments = []string{}
+	}
+
+	params := db.GetFeedProfilesParams{
+		ID:          int64(id),
+		Limit:       int32(limit),
+		Cities:      cities,
+		Genres:      genres,
+		Instruments: instruments,
+		MinProficiency: pgtype.Int4{
+			Int32: int32(uintFromPtr(filters.ProficiencyLevel)),
+			Valid: filters.ProficiencyLevel != nil,
+		},
+		TheoryLevel: pgtype.Int4{
+			Int32: int32(uintFromPtr(filters.TheoryLevel)),
+			Valid: filters.TheoryLevel != nil,
+		},
+	}
+
+	if filters.HasExperience != nil {
+		params.HasExp = pgtype.Text{
+			String: string(*filters.HasExperience),
+			Valid:  true,
+		}
+	} else {
+		params.HasExp = pgtype.Text{Valid: false}
+	}
+
+	dbRows, err := r.queries.GetFeedProfiles(ctx, params)
 	if err != nil {
-		log.Printf("[REPO:GetFeed:ERROR] Ошибка запроса ленты: %v", err)
 		return nil, err
 	}
 
 	profiles := make([]*domain.FullProfile, 0, len(dbRows))
-
 	for _, row := range dbRows {
-		var genres []string
-		if genresBytes, ok := row.Genres.([]byte); ok {
-			if err := json.Unmarshal(genresBytes, &genres); err != nil {
-				log.Printf("ошибка парсинга жанров для id %d: %v", row.ID, err)
-				genres = []string{}
+		profiles = append(profiles, r.mapRowToProfile(
+			row.ID, row.Name, row.City, row.Contacts,
+			row.AboutMe, row.PhotoPath, row.AudioPath, row.ExternalLink,
+			row.Age, row.TheoreticalKnowledgeLevel,
+			row.HasPerformanceExperience, row.IsVisible,
+			row.Genres, row.Instruments,
+		))
+	}
+	return profiles, nil
+}
+
+func (r *ProfileRepositoryImpl) GetPublicFeed(limit int) ([]*domain.FullProfile, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	dbRows, err := r.queries.GetPublicFeed(ctx, int32(limit))
+	if err != nil {
+		return nil, err
+	}
+
+	profiles := make([]*domain.FullProfile, 0, len(dbRows))
+	for _, row := range dbRows {
+		p := r.mapRowToProfile(
+			row.ID, row.Name, row.City, row.Contacts,
+			row.AboutMe, row.PhotoPath, row.AudioPath, row.ExternalLink,
+			row.Age, row.TheoreticalKnowledgeLevel,
+			row.HasPerformanceExperience, row.IsVisible,
+			row.Genres, row.Instruments,
+		)
+		profiles = append(profiles, p)
+	}
+	return profiles, nil
+}
+
+func (r *ProfileRepositoryImpl) mapRowToProfile(
+	id int64,
+	name, city, contacts, aboutMe, photoPath, audioPath, externalLink pgtype.Text,
+	age, theoryLevel pgtype.Int4,
+	hasExp pgtype.Text,
+	isVisible bool,
+	genresRaw, instsRaw interface{},
+) *domain.FullProfile {
+
+	var genres []string
+    
+    switch v := genresRaw.(type) {
+    case []string:
+        genres = v
+    case []interface{}:
+        for _, val := range v {
+            if s, ok := val.(string); ok {
+                genres = append(genres, s)
+            }
+        }
+    case []byte:
+        json.Unmarshal(v, &genres)
+    }
+
+    if genres == nil {
+        genres = []string{}
+    }
+
+	type instDTO struct {
+		Name             string `json:"name"`
+		ProficiencyLevel uint   `json:"proficiency_level"`
+	}
+	var rawInsts []instDTO
+
+	if slice, ok := instsRaw.([]interface{}); ok {
+		for _, item := range slice {
+			if m, ok := item.(map[string]interface{}); ok {
+				rawInsts = append(rawInsts, instDTO{
+					Name:             m["name"].(string),
+					ProficiencyLevel: uint(m["proficiency_level"].(float64)),
+				})
 			}
-		} else {
-			genres = []string{}
 		}
+	} else if b, ok := instsRaw.([]byte); ok {
+		json.Unmarshal(b, &rawInsts)
+	}
 
-		type instDTO struct {
-			Name             string `json:"name"`
-			ProficiencyLevel uint   `json:"proficiency_level"`
-		}
-		var rawInsts []instDTO
-		if instsBytes, ok := row.Instruments.([]byte); ok {
-			if err := json.Unmarshal(instsBytes, &rawInsts); err != nil {
-				log.Printf("ошибка парсинга инструментов для id %d: %v", row.ID, err)
-				rawInsts = []instDTO{}
-			}
-		} else {
-			rawInsts = []instDTO{}
-		}
-
-		domainInsts := make([]*domain.Instrument, 0, len(rawInsts))
-		for _, ri := range rawInsts {
-			domainInsts = append(domainInsts, &domain.Instrument{
-				Instrument:                 ri.Name,
-				InstrumentProficiencyLevel: ri.ProficiencyLevel,
-			})
-		}
-
-		profiles = append(profiles, &domain.FullProfile{
-			ID:                   domain.ProfileID(row.ID),
-			UserName:             row.Name.String,
-			City:                 row.City.String,
-			Contact:              row.Contacts.String,
-			PerformancExperience: ToPerformanceEx(row.HasPerformanceExperience),
-			Link:                 textToPtr(row.ExternalLink),
-			AboutUser:            textToPtr(row.AboutMe),
-			Age:                  int4ToUintPtr(row.Age),
-			TheoryLevel:          int4ToUintPtr(row.TheoreticalKnowledgeLevel),
-			Genres:               genres,
-			Instruments:          domainInsts,
-			IsVisible:            row.IsVisible,
+	domainInsts := make([]*domain.Instrument, 0, len(rawInsts))
+	for _, ri := range rawInsts {
+		domainInsts = append(domainInsts, &domain.Instrument{
+			Instrument:                 ri.Name,
+			InstrumentProficiencyLevel: ri.ProficiencyLevel,
 		})
 	}
 
-	log.Printf("[REPO:GetFeed:SUCCESS] Возвращено %d профилей", len(profiles))
-	return profiles, nil
+	return &domain.FullProfile{
+		ID:                   domain.ProfileID(id),
+		UserName:             name.String,
+		City:                 city.String,
+		Contact:              contacts.String,
+		PerformancExperience: ToPerformanceEx(hasExp),
+		Link:                 textToPtr(externalLink),
+		AboutUser:            textToPtr(aboutMe),
+		PhotoURL:             textToPtr(photoPath),
+		AudioURL:             textToPtr(audioPath),
+		Age:                  int4ToUintPtr(age),
+		TheoryLevel:          int4ToUintPtr(theoryLevel),
+		Genres:               genres,
+		Instruments:          domainInsts,
+		IsVisible:            isVisible,
+	}
+}
+
+func (r *ProfileRepositoryImpl) AddInteraction(swiper, target domain.ProfileID, action string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	qtx := r.queries.WithTx(tx)
+
+	err = qtx.AddInteraction(ctx, db.AddInteractionParams{
+		SwiperUserID: int64(swiper),
+		TargetUserID: int64(target),
+		Action:       pgtype.Text{String: action, Valid: true},
+	})
+	if err != nil {
+		return false, err
+	}
+
+	if action != "like" {
+		return false, tx.Commit(ctx)
+	}
+
+	isMatch, err := qtx.CheckMatch(ctx, db.CheckMatchParams{
+		SwiperUserID: int64(target),
+		TargetUserID: int64(swiper),
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return isMatch, tx.Commit(ctx)
 }

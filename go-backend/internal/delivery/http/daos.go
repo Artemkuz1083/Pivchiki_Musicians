@@ -9,6 +9,8 @@ type UpdateProfile struct {
 	PerformancExperience *domain.PerformanceExperience `json:"performanceExperience,omitempty"`
 	Link                 *string                       `json:"link,omitempty"`
 	AboutUser            *string                       `json:"aboutUser,omitempty"`
+	PhotoURL             *string                       `json:"photoUrl,omitempty"`
+	AudioURL             *string                       `json:"audioUrl,omitempty"`
 	Age                  *uint                         `json:"age,omitempty"`
 	TheoryLevel          *uint                         `json:"theoryLevel,omitempty"`
 	Genres               *[]string                     `json:"genres,omitempty"`

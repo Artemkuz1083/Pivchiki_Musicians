@@ -45,3 +45,5 @@ CREATE TABLE IF NOT EXISTS user_likes_user (
     action TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX idx_unique_swipe ON user_likes_user (swiper_user_id, target_user_id);

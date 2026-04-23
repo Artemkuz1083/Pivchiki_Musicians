@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addInteraction = `-- name: AddInteraction :exec
+INSERT INTO user_likes_user (swiper_user_id, target_user_id, action)
+VALUES ($1, $2, $3)
+ON CONFLICT (swiper_user_id, target_user_id) 
+DO UPDATE SET action = EXCLUDED.action, created_at = NOW()
+`
+
+type AddInteractionParams struct {
+	SwiperUserID int64
+	TargetUserID int64
+	Action       pgtype.Text
+}
+
+// Добавляем лайк или дизлайк. Используем ON CONFLICT, чтобы избежать ошибок при повторном свайпе
+func (q *Queries) AddInteraction(ctx context.Context, arg AddInteractionParams) error {
+	_, err := q.db.Exec(ctx, addInteraction, arg.SwiperUserID, arg.TargetUserID, arg.Action)
+	return err
+}
+
 const addUserGenre = `-- name: AddUserGenre :exec
 
 INSERT INTO user_genres (user_id, name) 
@@ -52,6 +71,26 @@ SELECT EXISTS(SELECT 1 FROM accounts WHERE login = $1)
 
 func (q *Queries) CheckAccountExists(ctx context.Context, login string) (bool, error) {
 	row := q.db.QueryRow(ctx, checkAccountExists, login)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const checkMatch = `-- name: CheckMatch :one
+SELECT EXISTS (
+    SELECT 1 FROM user_likes_user 
+    WHERE swiper_user_id = $1 AND target_user_id = $2 AND action = 'like'
+)
+`
+
+type CheckMatchParams struct {
+	SwiperUserID int64
+	TargetUserID int64
+}
+
+// Проверяем, лайкал ли нас этот пользователь в ответ
+func (q *Queries) CheckMatch(ctx context.Context, arg CheckMatchParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkMatch, arg.SwiperUserID, arg.TargetUserID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -165,30 +204,46 @@ const getFeedProfiles = `-- name: GetFeedProfiles :many
 SELECT 
     u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
     u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
+    u.photo_path, u.audio_path,
     COALESCE(
-        (SELECT json_agg(ug.name) FROM user_genres ug WHERE ug.user_id = u.id), 
-        '[]'::json
+        (SELECT array_agg(ug.name)::text[] FROM user_genres ug WHERE ug.user_id = u.id), 
+        '{}'::text[]
     ) as genres,
     COALESCE(
-        (SELECT json_agg(json_build_object(
-            'name', i.name, 
-            'proficiency_level', i.proficiency_level
-        )) FROM instruments i WHERE i.user_id = u.id), 
-        '[]'::json
+        (SELECT jsonb_agg(jsonb_build_object('name', i.name, 'proficiency_level', i.proficiency_level)) 
+         FROM instruments i WHERE i.user_id = u.id), 
+        '[]'::jsonb
     ) as instruments
 FROM public.users u
-WHERE u.id != $1 AND u.id NOT IN (
-    -- Тут в будущем будет подзапрос к таблице лайков/дизлайков
-    SELECT 0
-)
-AND u.is_visible = true
+WHERE u.id != $1 
+  AND u.is_visible = true
+  AND (cardinality($3::text[]) = 0 OR u.city = ANY($3::text[]))
+  AND (cardinality($4::text[]) = 0 OR EXISTS (
+      SELECT 1 FROM user_genres ug WHERE ug.user_id = u.id AND ug.name = ANY($4::text[])
+  ))
+  AND (cardinality($5::text[]) = 0 OR EXISTS (
+      SELECT 1 FROM instruments i WHERE i.user_id = u.id 
+      AND i.name = ANY($5::text[])
+      AND ($6::int IS NULL OR i.proficiency_level >= $6)
+  ))
+  AND ($7::text IS NULL OR u.has_performance_experience = $7::text)
+  AND ($8::int IS NULL OR u.theoretical_knowledge_level >= $8)
+  AND NOT EXISTS (
+      SELECT 1 FROM user_likes_user ul WHERE ul.swiper_user_id = $1 AND ul.target_user_id = u.id
+  )
 ORDER BY RANDOM()
 LIMIT $2
 `
 
 type GetFeedProfilesParams struct {
-	ID    int64
-	Limit int32
+	ID             int64
+	Limit          int32
+	Cities         []string
+	Genres         []string
+	Instruments    []string
+	MinProficiency pgtype.Int4
+	HasExp         pgtype.Text
+	TheoryLevel    pgtype.Int4
 }
 
 type GetFeedProfilesRow struct {
@@ -202,12 +257,23 @@ type GetFeedProfilesRow struct {
 	AboutMe                   pgtype.Text
 	ExternalLink              pgtype.Text
 	IsVisible                 bool
+	PhotoPath                 pgtype.Text
+	AudioPath                 pgtype.Text
 	Genres                    interface{}
 	Instruments               interface{}
 }
 
 func (q *Queries) GetFeedProfiles(ctx context.Context, arg GetFeedProfilesParams) ([]GetFeedProfilesRow, error) {
-	rows, err := q.db.Query(ctx, getFeedProfiles, arg.ID, arg.Limit)
+	rows, err := q.db.Query(ctx, getFeedProfiles,
+		arg.ID,
+		arg.Limit,
+		arg.Cities,
+		arg.Genres,
+		arg.Instruments,
+		arg.MinProficiency,
+		arg.HasExp,
+		arg.TheoryLevel,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -226,6 +292,83 @@ func (q *Queries) GetFeedProfiles(ctx context.Context, arg GetFeedProfilesParams
 			&i.AboutMe,
 			&i.ExternalLink,
 			&i.IsVisible,
+			&i.PhotoPath,
+			&i.AudioPath,
+			&i.Genres,
+			&i.Instruments,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPublicFeed = `-- name: GetPublicFeed :many
+SELECT 
+    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
+    u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
+    u.photo_path, u.audio_path,
+    COALESCE(
+        (SELECT array_agg(ug.name)::text[] FROM user_genres ug WHERE ug.user_id = u.id), 
+        '{}'::text[]
+    ) as genres,
+    COALESCE(
+        (SELECT jsonb_agg(jsonb_build_object(
+            'name', i.name, 
+            'proficiency_level', i.proficiency_level
+        )) FROM instruments i WHERE i.user_id = u.id), 
+        '[]'::jsonb
+    ) as instruments
+FROM public.users u
+WHERE u.is_visible = true
+ORDER BY RANDOM()
+LIMIT $1
+`
+
+type GetPublicFeedRow struct {
+	ID                        int64
+	Name                      pgtype.Text
+	City                      pgtype.Text
+	Age                       pgtype.Int4
+	Contacts                  pgtype.Text
+	TheoreticalKnowledgeLevel pgtype.Int4
+	HasPerformanceExperience  pgtype.Text
+	AboutMe                   pgtype.Text
+	ExternalLink              pgtype.Text
+	IsVisible                 bool
+	PhotoPath                 pgtype.Text
+	AudioPath                 pgtype.Text
+	Genres                    interface{}
+	Instruments               interface{}
+}
+
+// Получение профилей для неавторизованных пользователей
+func (q *Queries) GetPublicFeed(ctx context.Context, limit int32) ([]GetPublicFeedRow, error) {
+	rows, err := q.db.Query(ctx, getPublicFeed, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPublicFeedRow
+	for rows.Next() {
+		var i GetPublicFeedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.City,
+			&i.Age,
+			&i.Contacts,
+			&i.TheoreticalKnowledgeLevel,
+			&i.HasPerformanceExperience,
+			&i.AboutMe,
+			&i.ExternalLink,
+			&i.IsVisible,
+			&i.PhotoPath,
+			&i.AudioPath,
 			&i.Genres,
 			&i.Instruments,
 		); err != nil {
@@ -338,7 +481,9 @@ SET
     has_performance_experience = COALESCE($7, has_performance_experience),
     about_me = COALESCE($8, about_me),
     external_link = COALESCE($9, external_link),
-    is_visible = COALESCE($10, is_visible)
+    is_visible = COALESCE($10, is_visible),
+    photo_path = COALESCE($11, photo_path),
+    audio_path = COALESCE($12, audio_path)
 WHERE id = $1
 `
 
@@ -353,6 +498,8 @@ type UpdateUserProfileParams struct {
 	AboutMe                   pgtype.Text
 	ExternalLink              pgtype.Text
 	IsVisible                 pgtype.Bool
+	PhotoPath                 pgtype.Text
+	AudioPath                 pgtype.Text
 }
 
 // Получаем обновленный профиль у юзера
@@ -368,6 +515,8 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		arg.AboutMe,
 		arg.ExternalLink,
 		arg.IsVisible,
+		arg.PhotoPath,
+		arg.AudioPath,
 	)
 	return err
 }
