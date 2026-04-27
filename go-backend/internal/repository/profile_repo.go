@@ -20,6 +20,7 @@ type ProfileRepository interface {
 	GetFeedProfiles(profile domain.ProfileID, limit int, filters *domain.ProfileFilters) ([]*domain.FullProfile, error)
 	GetPublicFeed(limit int) ([]*domain.FullProfile, error)
 	AddInteraction(swiper, target domain.ProfileID, action string) (bool, error)
+	GetMatches(swiperID domain.ProfileID) ([]*domain.FullProfile, error)
 }
 
 var _ ProfileRepository = (*ProfileRepositoryImpl)(nil)
@@ -433,4 +434,27 @@ func (r *ProfileRepositoryImpl) AddInteraction(swiper, target domain.ProfileID, 
 	}
 
 	return isMatch, tx.Commit(ctx)
+}
+
+func (r *ProfileRepositoryImpl) GetMatches(swiperID domain.ProfileID) ([]*domain.FullProfile, error) {
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+
+    matchIDs, err := r.queries.GetUserMatches(ctx, int64(swiperID))
+    if err != nil {
+        return nil, err
+    }
+
+    matches := make([]*domain.FullProfile, 0, len(matchIDs))
+
+    for _, id := range matchIDs {
+        profile, err := r.GetProfile(domain.ProfileID(id))
+        if err != nil {
+            log.Printf("Ошибка при получении профиля мэтча %d: %v", id, err)
+            continue
+        }
+        matches = append(matches, profile)
+    }
+
+    return matches, nil
 }

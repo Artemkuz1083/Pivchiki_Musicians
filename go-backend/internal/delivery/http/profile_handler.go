@@ -397,3 +397,25 @@ func (h *ProfileHandler) Swipe(w http.ResponseWriter, r *http.Request) {
 
 	renderJSON(w, http.StatusOK, result)
 }
+
+// GetMatches godoc
+// @Summary      Список взаимных лайков
+// @Tags         userProfile
+// @Produce      json
+// @Security     ApiKeyAuth
+// @Router       /api/v1/profile/matches [get]
+func (h *ProfileHandler) GetMatches(w http.ResponseWriter, r *http.Request) {
+    userID, ok := r.Context().Value("user_id").(uint64)
+    if !ok {
+        JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+        return
+    }
+
+    matches, err := h.Service.GetMatches(domain.ProfileID(userID))
+    if err != nil {
+        JSONError(w, ErrorMsg{err.Error()}, http.StatusInternalServerError)
+        return
+    }
+
+    renderJSON(w, http.StatusOK, matches)
+}

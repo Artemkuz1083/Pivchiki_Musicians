@@ -470,6 +470,40 @@ func (q *Queries) GetUserInstruments(ctx context.Context, userID int64) ([]GetUs
 	return items, nil
 }
 
+const getUserMatches = `-- name: GetUserMatches :many
+SELECT 
+    l1.target_user_id as match_id
+FROM user_likes_user l1
+INNER JOIN user_likes_user l2 ON 
+    l1.target_user_id = l2.swiper_user_id AND 
+    l1.swiper_user_id = l2.target_user_id
+WHERE 
+    l1.swiper_user_id = $1 
+    AND l1.action = 'like' 
+    AND l2.action = 'like'
+`
+
+// Найти ID всех пользователей, с которыми есть взаимный лайк
+func (q *Queries) GetUserMatches(ctx context.Context, swiperUserID int64) ([]int64, error) {
+	rows, err := q.db.Query(ctx, getUserMatches, swiperUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var match_id int64
+		if err := rows.Scan(&match_id); err != nil {
+			return nil, err
+		}
+		items = append(items, match_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateUserProfile = `-- name: UpdateUserProfile :exec
 UPDATE users
 SET 

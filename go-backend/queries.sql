@@ -146,3 +146,16 @@ SELECT EXISTS (
     SELECT 1 FROM user_likes_user 
     WHERE swiper_user_id = $1 AND target_user_id = $2 AND action = 'like'
 );
+
+-- name: GetUserMatches :many
+-- Найти ID всех пользователей, с которыми есть взаимный лайк
+SELECT 
+    l1.target_user_id as match_id
+FROM user_likes_user l1
+INNER JOIN user_likes_user l2 ON 
+    l1.target_user_id = l2.swiper_user_id AND 
+    l1.swiper_user_id = l2.target_user_id
+WHERE 
+    l1.swiper_user_id = $1 
+    AND l1.action = 'like' 
+    AND l2.action = 'like';

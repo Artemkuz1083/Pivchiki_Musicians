@@ -24,6 +24,7 @@ func PostProfileRouter(handler *ProfileHandler) http.Handler {
 	mux.HandleFunc("GET /feed", handler.GetFeed)
 	mux.HandleFunc("POST /feed/{id}/swipe", handler.Swipe)
 	mux.HandleFunc("POST /media", handler.UploadMedia)
+	mux.HandleFunc("GET /matches", handler.GetMatches)
 
 	return mux
 }

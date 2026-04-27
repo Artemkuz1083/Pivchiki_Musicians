@@ -14,6 +14,7 @@ type ProfileService interface {
 	GetFeedProfile(id domain.ProfileID, limit int, filters *domain.ProfileFilters) ([]*domain.FullProfile, error)
 	GetPublicFeed(limit int) ([]*domain.FullProfile, error)
 	Swipe(swiper, target domain.ProfileID, action string) (*domain.SwipeResult, error)
+	GetMatches(id domain.ProfileID) ([]*domain.FullProfile, error)
 }
 
 var _ ProfileService = (*ProfileServiceImpl)(nil)
@@ -84,19 +85,23 @@ func (s *ProfileServiceImpl) GetFeedProfile(id domain.ProfileID, limit int, filt
 }
 
 func (s *ProfileServiceImpl) GetPublicFeed(limit int) ([]*domain.FullProfile, error) {
-    return s.repo.GetPublicFeed(limit)
+	return s.repo.GetPublicFeed(limit)
 }
 
 func (s *ProfileServiceImpl) Swipe(swiper, target domain.ProfileID, action string) (*domain.SwipeResult, error) {
-    isMatch, err := s.repo.AddInteraction(swiper, target, action)
-    if err != nil {
-        log.Printf("[SERV:Swipe:ERROR] Ошибка при свайпе: %v", err)
-        return nil, err
-    }
+	isMatch, err := s.repo.AddInteraction(swiper, target, action)
+	if err != nil {
+		log.Printf("[SERV:Swipe:ERROR] Ошибка при свайпе: %v", err)
+		return nil, err
+	}
 
-    if isMatch {
-        log.Printf("[MATCH] Ура! Пользователь %d и %d мэтчнулись!", swiper, target)
-    }
+	if isMatch {
+		log.Printf("[MATCH] Ура! Пользователь %d и %d мэтчнулись!", swiper, target)
+	}
 
-    return &domain.SwipeResult{IsMatch: isMatch}, nil
+	return &domain.SwipeResult{IsMatch: isMatch}, nil
+}
+
+func (s *ProfileServiceImpl) GetMatches(id domain.ProfileID) ([]*domain.FullProfile, error) {
+	return s.repo.GetMatches(id)
 }
