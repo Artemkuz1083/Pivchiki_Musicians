@@ -203,7 +203,7 @@ export function Browse() {
 						<div className='animate-in fade-in zoom-in duration-300'>
 							<BrowseCard
 								profile={currentProfile}
-								imageUrl={`https://picsum.photos/seed/${currentProfile.ID}/600/800`}
+								imageUrl={`https://loremflickr.com/600/400?lock=${currentProfile.ID}`}
 							/>
 
 							<div className='flex gap-4 mt-6'>
@@ -227,7 +227,7 @@ export function Browse() {
 							{/* Контейнер с размытым фото для затравки */}
 							<div className='relative h-[200px] w-full rounded-[2rem] overflow-hidden grayscale opacity-40'>
 								<img
-									src={`https://picsum.photos/seed/${currentProfile.ID}/600/400`}
+									src={`https://loremflickr.com/600/400?lock=${currentProfile.ID}`}
 									className='w-full h-full object-cover blur-md'
 									alt='Locked profile'
 								/>
