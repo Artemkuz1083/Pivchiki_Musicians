@@ -11,7 +11,85 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addGroupGenre = `-- name: AddGroupGenre :exec
+INSERT INTO group_genres (group_id, name) VALUES ($1, $2)
+`
+
+type AddGroupGenreParams struct {
+	GroupID int64
+	Name    string
+}
+
+func (q *Queries) AddGroupGenre(ctx context.Context, arg AddGroupGenreParams) error {
+	_, err := q.db.Exec(ctx, addGroupGenre, arg.GroupID, arg.Name)
+	return err
+}
+
+const addGroupInteraction = `-- name: AddGroupInteraction :exec
+INSERT INTO user_likes_group (swiper_user_id, target_group_id, action)
+VALUES ($1, $2, $3)
+ON CONFLICT (swiper_user_id, target_group_id) 
+DO UPDATE SET action = EXCLUDED.action, created_at = NOW()
+`
+
+type AddGroupInteractionParams struct {
+	SwiperUserID  int64
+	TargetGroupID int64
+	Action        string
+}
+
+// Пользователь -> Группа
+func (q *Queries) AddGroupInteraction(ctx context.Context, arg AddGroupInteractionParams) error {
+	_, err := q.db.Exec(ctx, addGroupInteraction, arg.SwiperUserID, arg.TargetGroupID, arg.Action)
+	return err
+}
+
+const addGroupLikeUser = `-- name: AddGroupLikeUser :exec
+INSERT INTO group_likes_user (swiper_group_id, target_user_id, action)
+VALUES ($1, $2, $3)
+ON CONFLICT (swiper_group_id, target_user_id) 
+DO UPDATE SET action = EXCLUDED.action, created_at = NOW()
+`
+
+type AddGroupLikeUserParams struct {
+	SwiperGroupID int64
+	TargetUserID  int64
+	Action        string
+}
+
+// Группа (админ) -> Пользователь
+func (q *Queries) AddGroupLikeUser(ctx context.Context, arg AddGroupLikeUserParams) error {
+	_, err := q.db.Exec(ctx, addGroupLikeUser, arg.SwiperGroupID, arg.TargetUserID, arg.Action)
+	return err
+}
+
+const addGroupMember = `-- name: AddGroupMember :exec
+INSERT INTO group_members (
+    group_id, user_id, role, is_admin
+) VALUES (
+    $1, $2, $3, $4
+)
+`
+
+type AddGroupMemberParams struct {
+	GroupID int64
+	UserID  int64
+	Role    string
+	IsAdmin bool
+}
+
+func (q *Queries) AddGroupMember(ctx context.Context, arg AddGroupMemberParams) error {
+	_, err := q.db.Exec(ctx, addGroupMember,
+		arg.GroupID,
+		arg.UserID,
+		arg.Role,
+		arg.IsAdmin,
+	)
+	return err
+}
+
 const addInteraction = `-- name: AddInteraction :exec
+
 INSERT INTO user_likes_user (swiper_user_id, target_user_id, action)
 VALUES ($1, $2, $3)
 ON CONFLICT (swiper_user_id, target_user_id) 
@@ -21,19 +99,17 @@ DO UPDATE SET action = EXCLUDED.action, created_at = NOW()
 type AddInteractionParams struct {
 	SwiperUserID int64
 	TargetUserID int64
-	Action       pgtype.Text
+	Action       string
 }
 
-// Добавляем лайк или дизлайк. Используем ON CONFLICT, чтобы избежать ошибок при повторном свайпе
+// --- LIKE & MATCH QUERIES ---
 func (q *Queries) AddInteraction(ctx context.Context, arg AddInteractionParams) error {
 	_, err := q.db.Exec(ctx, addInteraction, arg.SwiperUserID, arg.TargetUserID, arg.Action)
 	return err
 }
 
 const addUserGenre = `-- name: AddUserGenre :exec
-
-INSERT INTO user_genres (user_id, name) 
-VALUES ($1, $2)
+INSERT INTO user_genres (user_id, name) VALUES ($1, $2)
 `
 
 type AddUserGenreParams struct {
@@ -41,7 +117,6 @@ type AddUserGenreParams struct {
 	Name   string
 }
 
-// --- GENRES ---
 func (q *Queries) AddUserGenre(ctx context.Context, arg AddUserGenreParams) error {
 	_, err := q.db.Exec(ctx, addUserGenre, arg.UserID, arg.Name)
 	return err
@@ -49,8 +124,7 @@ func (q *Queries) AddUserGenre(ctx context.Context, arg AddUserGenreParams) erro
 
 const addUserInstrument = `-- name: AddUserInstrument :exec
 
-INSERT INTO instruments (user_id, name, proficiency_level) 
-VALUES ($1, $2, $3)
+INSERT INTO instruments (user_id, name, proficiency_level) VALUES ($1, $2, $3)
 `
 
 type AddUserInstrumentParams struct {
@@ -59,9 +133,24 @@ type AddUserInstrumentParams struct {
 	ProficiencyLevel int32
 }
 
-// --- INSTRUMENTS ---
+// --- OTHER ---
 func (q *Queries) AddUserInstrument(ctx context.Context, arg AddUserInstrumentParams) error {
 	_, err := q.db.Exec(ctx, addUserInstrument, arg.UserID, arg.Name, arg.ProficiencyLevel)
+	return err
+}
+
+const cancelInvitation = `-- name: CancelInvitation :exec
+DELETE FROM group_invitations 
+WHERE id = $1 AND group_id = $2
+`
+
+type CancelInvitationParams struct {
+	ID      int32
+	GroupID int64
+}
+
+func (q *Queries) CancelInvitation(ctx context.Context, arg CancelInvitationParams) error {
+	_, err := q.db.Exec(ctx, cancelInvitation, arg.ID, arg.GroupID)
 	return err
 }
 
@@ -88,7 +177,7 @@ type CheckMatchParams struct {
 	TargetUserID int64
 }
 
-// Проверяем, лайкал ли нас этот пользователь в ответ
+// Возвращаем обратно этот метод для репозитория
 func (q *Queries) CheckMatch(ctx context.Context, arg CheckMatchParams) (bool, error) {
 	row := q.db.QueryRow(ctx, checkMatch, arg.SwiperUserID, arg.TargetUserID)
 	var exists bool
@@ -109,7 +198,6 @@ func (q *Queries) CheckProfileExists(ctx context.Context, id int64) (bool, error
 
 const createAccount = `-- name: CreateAccount :one
 
-
 INSERT INTO accounts (login, password_hash)
 VALUES ($1, $2)
 RETURNING id
@@ -120,11 +208,68 @@ type CreateAccountParams struct {
 	PasswordHash string
 }
 
-// queries.sql
 // --- AUTH QUERIES ---
 func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (int64, error) {
 	row := q.db.QueryRow(ctx, createAccount, arg.Login, arg.PasswordHash)
 	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createGroupProfile = `-- name: CreateGroupProfile :one
+
+INSERT INTO group_profiles (
+    name, city, formation_date, platforms, description, is_visible, seriousness_level, financial_status, concerts
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
+) RETURNING id
+`
+
+type CreateGroupProfileParams struct {
+	Name             string
+	City             pgtype.Text
+	FormationDate    pgtype.Int4
+	Platforms        []string
+	Description      pgtype.Text
+	IsVisible        bool
+	SeriousnessLevel pgtype.Text
+	FinancialStatus  pgtype.Text
+	Concerts         []byte
+}
+
+// --- GROUP QUERIES ---
+func (q *Queries) CreateGroupProfile(ctx context.Context, arg CreateGroupProfileParams) (int64, error) {
+	row := q.db.QueryRow(ctx, createGroupProfile,
+		arg.Name,
+		arg.City,
+		arg.FormationDate,
+		arg.Platforms,
+		arg.Description,
+		arg.IsVisible,
+		arg.SeriousnessLevel,
+		arg.FinancialStatus,
+		arg.Concerts,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createInvitation = `-- name: CreateInvitation :one
+INSERT INTO group_invitations (group_id, user_id, role, status)
+VALUES ($1, $2, $3, 'PENDING')
+RETURNING id
+`
+
+type CreateInvitationParams struct {
+	GroupID int64
+	UserID  int64
+	Role    string
+}
+
+func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationParams) (int32, error) {
+	row := q.db.QueryRow(ctx, createInvitation, arg.GroupID, arg.UserID, arg.Role)
+	var id int32
 	err := row.Scan(&id)
 	return id, err
 }
@@ -160,6 +305,24 @@ func (q *Queries) CreateUserProfile(ctx context.Context, arg CreateUserProfilePa
 		arg.ExternalLink,
 		arg.IsVisible,
 	)
+	return err
+}
+
+const deleteGroupGenres = `-- name: DeleteGroupGenres :exec
+DELETE FROM group_genres WHERE group_id = $1
+`
+
+func (q *Queries) DeleteGroupGenres(ctx context.Context, groupID int64) error {
+	_, err := q.db.Exec(ctx, deleteGroupGenres, groupID)
+	return err
+}
+
+const deleteGroupProfile = `-- name: DeleteGroupProfile :exec
+DELETE FROM group_profiles WHERE id = $1
+`
+
+func (q *Queries) DeleteGroupProfile(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteGroupProfile, id)
 	return err
 }
 
@@ -202,32 +365,26 @@ func (q *Queries) GetAccountByLogin(ctx context.Context, login string) (GetAccou
 
 const getFeedProfiles = `-- name: GetFeedProfiles :many
 SELECT 
-    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
-    u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
-    u.photo_path, u.audio_path,
-    COALESCE(
-        (SELECT array_agg(ug.name)::text[] FROM user_genres ug WHERE ug.user_id = u.id), 
-        '{}'::text[]
-    ) as genres,
-    COALESCE(
-        (SELECT jsonb_agg(jsonb_build_object('name', i.name, 'proficiency_level', i.proficiency_level)) 
-         FROM instruments i WHERE i.user_id = u.id), 
-        '[]'::jsonb
-    ) as instruments
-FROM public.users u
+    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, u.has_performance_experience, u.about_me, u.external_link, u.is_visible, u.photo_path, u.audio_path,
+    COALESCE((SELECT array_agg(ug.name)::text[] FROM user_genres ug WHERE ug.user_id = u.id), '{}'::text[]) as genres,
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('name', i.name, 'proficiency_level', i.proficiency_level)) FROM instruments i WHERE i.user_id = u.id), '[]'::jsonb) as instruments
+FROM users u
 WHERE u.id != $1 
   AND u.is_visible = true
   AND (cardinality($3::text[]) = 0 OR u.city = ANY($3::text[]))
   AND (cardinality($4::text[]) = 0 OR EXISTS (
       SELECT 1 FROM user_genres ug WHERE ug.user_id = u.id AND ug.name = ANY($4::text[])
   ))
+  -- ВОТ ЭТИ ПОЛЯ НУЖНЫ ДЛЯ ТВОЕГО РЕПО:
   AND (cardinality($5::text[]) = 0 OR EXISTS (
-      SELECT 1 FROM instruments i WHERE i.user_id = u.id 
-      AND i.name = ANY($5::text[])
-      AND ($6::int IS NULL OR i.proficiency_level >= $6)
+      SELECT 1 FROM instruments i WHERE i.user_id = u.id AND i.name = ANY($5::text[])
   ))
-  AND ($7::text IS NULL OR u.has_performance_experience = $7::text)
-  AND ($8::int IS NULL OR u.theoretical_knowledge_level >= $8)
+  AND ($6::int IS NULL OR EXISTS (
+      SELECT 1 FROM instruments i WHERE i.user_id = u.id AND i.proficiency_level >= $6
+  ))
+  AND ($7::int IS NULL OR u.theoretical_knowledge_level >= $7)
+  AND ($8::text IS NULL OR u.has_performance_experience = $8)
+  -- Конец фильтров
   AND NOT EXISTS (
       SELECT 1 FROM user_likes_user ul WHERE ul.swiper_user_id = $1 AND ul.target_user_id = u.id
   )
@@ -242,8 +399,8 @@ type GetFeedProfilesParams struct {
 	Genres         []string
 	Instruments    []string
 	MinProficiency pgtype.Int4
-	HasExp         pgtype.Text
 	TheoryLevel    pgtype.Int4
+	HasExp         pgtype.Text
 }
 
 type GetFeedProfilesRow struct {
@@ -271,8 +428,8 @@ func (q *Queries) GetFeedProfiles(ctx context.Context, arg GetFeedProfilesParams
 		arg.Genres,
 		arg.Instruments,
 		arg.MinProficiency,
-		arg.HasExp,
 		arg.TheoryLevel,
+		arg.HasExp,
 	)
 	if err != nil {
 		return nil, err
@@ -307,20 +464,238 @@ func (q *Queries) GetFeedProfiles(ctx context.Context, arg GetFeedProfilesParams
 	return items, nil
 }
 
+const getGroup = `-- name: GetGroup :one
+SELECT id, name, city, formation_date, platforms, description, is_visible, seriousness_level, financial_status, concerts, created_at FROM group_profiles WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetGroup(ctx context.Context, id int64) (GroupProfile, error) {
+	row := q.db.QueryRow(ctx, getGroup, id)
+	var i GroupProfile
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.City,
+		&i.FormationDate,
+		&i.Platforms,
+		&i.Description,
+		&i.IsVisible,
+		&i.SeriousnessLevel,
+		&i.FinancialStatus,
+		&i.Concerts,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getGroupFeed = `-- name: GetGroupFeed :many
+SELECT 
+    g.id, g.name, g.city, g.formation_date, g.platforms, g.description, g.is_visible, g.seriousness_level, g.financial_status, g.concerts, g.created_at,
+    COALESCE((SELECT array_agg(gg.name)::text[] FROM group_genres gg WHERE gg.group_id = g.id), '{}'::text[]) as genres,
+    COALESCE(
+        (SELECT jsonb_agg(jsonb_build_object('user_id', gm.user_id, 'name', u.name, 'role', gm.role)) 
+         FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = g.id), 
+        '[]'::jsonb
+    ) as members
+FROM group_profiles g
+WHERE g.is_visible = true
+  AND (cardinality($3::text[]) = 0 OR g.city = ANY($3::text[]))
+  AND NOT EXISTS (
+      SELECT 1 FROM user_likes_group ulg WHERE ulg.swiper_user_id = $1 AND ulg.target_group_id = g.id
+  )
+ORDER BY RANDOM()
+LIMIT $2
+`
+
+type GetGroupFeedParams struct {
+	SwiperUserID int64
+	Limit        int32
+	Cities       []string
+}
+
+type GetGroupFeedRow struct {
+	ID               int64
+	Name             string
+	City             pgtype.Text
+	FormationDate    pgtype.Int4
+	Platforms        []string
+	Description      pgtype.Text
+	IsVisible        bool
+	SeriousnessLevel pgtype.Text
+	FinancialStatus  pgtype.Text
+	Concerts         []byte
+	CreatedAt        pgtype.Timestamptz
+	Genres           interface{}
+	Members          interface{}
+}
+
+func (q *Queries) GetGroupFeed(ctx context.Context, arg GetGroupFeedParams) ([]GetGroupFeedRow, error) {
+	rows, err := q.db.Query(ctx, getGroupFeed, arg.SwiperUserID, arg.Limit, arg.Cities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGroupFeedRow
+	for rows.Next() {
+		var i GetGroupFeedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.City,
+			&i.FormationDate,
+			&i.Platforms,
+			&i.Description,
+			&i.IsVisible,
+			&i.SeriousnessLevel,
+			&i.FinancialStatus,
+			&i.Concerts,
+			&i.CreatedAt,
+			&i.Genres,
+			&i.Members,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGroupGenres = `-- name: GetGroupGenres :many
+SELECT name FROM public.group_genres WHERE group_id = $1
+`
+
+// Получаем все жанры группы
+func (q *Queries) GetGroupGenres(ctx context.Context, groupID int64) ([]string, error) {
+	rows, err := q.db.Query(ctx, getGroupGenres, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGroupMatches = `-- name: GetGroupMatches :many
+SELECT 
+    g.id, g.name, g.city, g.formation_date, g.platforms, g.description, g.is_visible, g.seriousness_level, g.financial_status, g.concerts, g.created_at,
+    COALESCE((SELECT array_agg(gg.name)::text[] FROM group_genres gg WHERE gg.group_id = g.id), '{}'::text[]) as genres
+FROM group_profiles g
+INNER JOIN user_likes_group ulg ON g.id = ulg.target_group_id
+INNER JOIN group_likes_user glu ON g.id = glu.swiper_group_id
+WHERE ulg.swiper_user_id = $1 
+  AND glu.target_user_id = $1
+  AND ulg.action = 'like'
+  AND glu.action = 'like'
+`
+
+type GetGroupMatchesRow struct {
+	ID               int64
+	Name             string
+	City             pgtype.Text
+	FormationDate    pgtype.Int4
+	Platforms        []string
+	Description      pgtype.Text
+	IsVisible        bool
+	SeriousnessLevel pgtype.Text
+	FinancialStatus  pgtype.Text
+	Concerts         []byte
+	CreatedAt        pgtype.Timestamptz
+	Genres           interface{}
+}
+
+// Взаимные лайки между юзером и группой
+func (q *Queries) GetGroupMatches(ctx context.Context, swiperUserID int64) ([]GetGroupMatchesRow, error) {
+	rows, err := q.db.Query(ctx, getGroupMatches, swiperUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGroupMatchesRow
+	for rows.Next() {
+		var i GetGroupMatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.City,
+			&i.FormationDate,
+			&i.Platforms,
+			&i.Description,
+			&i.IsVisible,
+			&i.SeriousnessLevel,
+			&i.FinancialStatus,
+			&i.Concerts,
+			&i.CreatedAt,
+			&i.Genres,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGroupMembers = `-- name: GetGroupMembers :many
+SELECT gm.user_id, u.name, gm.role, gm.is_admin FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = $1
+`
+
+type GetGroupMembersRow struct {
+	UserID  int64
+	Name    pgtype.Text
+	Role    string
+	IsAdmin bool
+}
+
+// Получение списка участников группы с их именами
+func (q *Queries) GetGroupMembers(ctx context.Context, groupID int64) ([]GetGroupMembersRow, error) {
+	rows, err := q.db.Query(ctx, getGroupMembers, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGroupMembersRow
+	for rows.Next() {
+		var i GetGroupMembersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Name,
+			&i.Role,
+			&i.IsAdmin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPublicFeed = `-- name: GetPublicFeed :many
 SELECT 
-    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, 
-    u.has_performance_experience, u.about_me, u.external_link, u.is_visible,
-    u.photo_path, u.audio_path,
+    u.id, u.name, u.city, u.age, u.contacts, u.theoretical_knowledge_level, u.has_performance_experience, u.about_me, u.external_link, u.is_visible, u.photo_path, u.audio_path,
     COALESCE(
         (SELECT array_agg(ug.name)::text[] FROM user_genres ug WHERE ug.user_id = u.id), 
         '{}'::text[]
     ) as genres,
     COALESCE(
-        (SELECT jsonb_agg(jsonb_build_object(
-            'name', i.name, 
-            'proficiency_level', i.proficiency_level
-        )) FROM instruments i WHERE i.user_id = u.id), 
+        (SELECT jsonb_agg(jsonb_build_object('name', i.name, 'proficiency_level', i.proficiency_level)) 
+         FROM instruments i WHERE i.user_id = u.id), 
         '[]'::jsonb
     ) as instruments
 FROM public.users u
@@ -346,7 +721,6 @@ type GetPublicFeedRow struct {
 	Instruments               interface{}
 }
 
-// Получение профилей для неавторизованных пользователей
 func (q *Queries) GetPublicFeed(ctx context.Context, limit int32) ([]GetPublicFeedRow, error) {
 	rows, err := q.db.Query(ctx, getPublicFeed, limit)
 	if err != nil {
@@ -382,15 +756,77 @@ func (q *Queries) GetPublicFeed(ctx context.Context, limit int32) ([]GetPublicFe
 	return items, nil
 }
 
+const getPublicGroupFeed = `-- name: GetPublicGroupFeed :many
+SELECT 
+    g.id, g.name, g.city, g.formation_date, g.platforms, g.description, g.is_visible, g.seriousness_level, g.financial_status, g.concerts, g.created_at,
+    COALESCE((SELECT array_agg(gg.name)::text[] FROM group_genres gg WHERE gg.group_id = g.id), '{}'::text[]) as genres,
+    COALESCE(
+        (SELECT jsonb_agg(jsonb_build_object('user_id', gm.user_id, 'name', u.name, 'role', gm.role)) 
+         FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = g.id), 
+        '[]'::jsonb
+    ) as members
+FROM group_profiles g
+WHERE g.is_visible = true
+ORDER BY RANDOM()
+LIMIT $1
+`
+
+type GetPublicGroupFeedRow struct {
+	ID               int64
+	Name             string
+	City             pgtype.Text
+	FormationDate    pgtype.Int4
+	Platforms        []string
+	Description      pgtype.Text
+	IsVisible        bool
+	SeriousnessLevel pgtype.Text
+	FinancialStatus  pgtype.Text
+	Concerts         []byte
+	CreatedAt        pgtype.Timestamptz
+	Genres           interface{}
+	Members          interface{}
+}
+
+func (q *Queries) GetPublicGroupFeed(ctx context.Context, limit int32) ([]GetPublicGroupFeedRow, error) {
+	rows, err := q.db.Query(ctx, getPublicGroupFeed, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPublicGroupFeedRow
+	for rows.Next() {
+		var i GetPublicGroupFeedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.City,
+			&i.FormationDate,
+			&i.Platforms,
+			&i.Description,
+			&i.IsVisible,
+			&i.SeriousnessLevel,
+			&i.FinancialStatus,
+			&i.Concerts,
+			&i.CreatedAt,
+			&i.Genres,
+			&i.Members,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUser = `-- name: GetUser :one
 
-SELECT id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible, photo_path, audio_path 
-FROM public.users
-WHERE id = $1 LIMIT 1
+SELECT id, name, city, age, contacts, theoretical_knowledge_level, has_performance_experience, about_me, external_link, is_visible, photo_path, audio_path FROM public.users WHERE id = $1 LIMIT 1
 `
 
 // --- USER PROFILE QUERIES ---
-// Получение одного профиля по ID
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	row := q.db.QueryRow(ctx, getUser, id)
 	var i User
@@ -412,9 +848,7 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 }
 
 const getUserGenres = `-- name: GetUserGenres :many
-SELECT name 
-FROM public.user_genres 
-WHERE user_id = $1
+SELECT name FROM public.user_genres WHERE user_id = $1
 `
 
 // Получаем все жанры пользователя одним списком строк
@@ -438,10 +872,47 @@ func (q *Queries) GetUserGenres(ctx context.Context, userID int64) ([]string, er
 	return items, nil
 }
 
+const getUserGroups = `-- name: GetUserGroups :many
+SELECT g.id, g.name, gm.role, gm.is_admin
+FROM group_profiles g
+JOIN group_members gm ON g.id = gm.group_id
+WHERE gm.user_id = $1
+`
+
+type GetUserGroupsRow struct {
+	ID      int64
+	Name    string
+	Role    string
+	IsAdmin bool
+}
+
+func (q *Queries) GetUserGroups(ctx context.Context, userID int64) ([]GetUserGroupsRow, error) {
+	rows, err := q.db.Query(ctx, getUserGroups, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserGroupsRow
+	for rows.Next() {
+		var i GetUserGroupsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Role,
+			&i.IsAdmin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserInstruments = `-- name: GetUserInstruments :many
-SELECT name, proficiency_level 
-FROM public.instruments 
-WHERE user_id = $1
+SELECT name, proficiency_level FROM public.instruments WHERE user_id = $1
 `
 
 type GetUserInstrumentsRow struct {
@@ -470,6 +941,47 @@ func (q *Queries) GetUserInstruments(ctx context.Context, userID int64) ([]GetUs
 	return items, nil
 }
 
+const getUserInvitations = `-- name: GetUserInvitations :many
+SELECT i.id, i.group_id, g.name as group_name, i.role, i.created_at
+FROM group_invitations i
+JOIN group_profiles g ON g.id = i.group_id
+WHERE i.user_id = $1 AND i.status = 'PENDING'
+`
+
+type GetUserInvitationsRow struct {
+	ID        int32
+	GroupID   int64
+	GroupName string
+	Role      string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetUserInvitations(ctx context.Context, userID int64) ([]GetUserInvitationsRow, error) {
+	rows, err := q.db.Query(ctx, getUserInvitations, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserInvitationsRow
+	for rows.Next() {
+		var i GetUserInvitationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.GroupName,
+			&i.Role,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserMatches = `-- name: GetUserMatches :many
 SELECT 
     l1.target_user_id as match_id
@@ -483,7 +995,7 @@ WHERE
     AND l2.action = 'like'
 `
 
-// Найти ID всех пользователей, с которыми есть взаимный лайк
+// Взаимные лайки музыкантов
 func (q *Queries) GetUserMatches(ctx context.Context, swiperUserID int64) ([]int64, error) {
 	rows, err := q.db.Query(ctx, getUserMatches, swiperUserID)
 	if err != nil {
@@ -502,6 +1014,104 @@ func (q *Queries) GetUserMatches(ctx context.Context, swiperUserID int64) ([]int
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeMemberFromGroup = `-- name: RemoveMemberFromGroup :exec
+DELETE FROM group_members WHERE group_id = $1 AND user_id = $2
+`
+
+type RemoveMemberFromGroupParams struct {
+	GroupID int64
+	UserID  int64
+}
+
+func (q *Queries) RemoveMemberFromGroup(ctx context.Context, arg RemoveMemberFromGroupParams) error {
+	_, err := q.db.Exec(ctx, removeMemberFromGroup, arg.GroupID, arg.UserID)
+	return err
+}
+
+const respondToInvitation = `-- name: RespondToInvitation :one
+UPDATE group_invitations 
+SET status = $2 
+WHERE id = $1 AND user_id = $3
+RETURNING group_id, role
+`
+
+type RespondToInvitationParams struct {
+	ID     int32
+	Status string
+	UserID int64
+}
+
+type RespondToInvitationRow struct {
+	GroupID int64
+	Role    string
+}
+
+func (q *Queries) RespondToInvitation(ctx context.Context, arg RespondToInvitationParams) (RespondToInvitationRow, error) {
+	row := q.db.QueryRow(ctx, respondToInvitation, arg.ID, arg.Status, arg.UserID)
+	var i RespondToInvitationRow
+	err := row.Scan(&i.GroupID, &i.Role)
+	return i, err
+}
+
+const updateGroupProfile = `-- name: UpdateGroupProfile :exec
+UPDATE group_profiles
+SET 
+    name = COALESCE($2, name),
+    city = COALESCE($3, city),
+    formation_date = COALESCE($4, formation_date),
+    platforms = COALESCE($5, platforms),
+    description = COALESCE($6, description),
+    is_visible = COALESCE($10, is_visible),
+    seriousness_level = COALESCE($7, seriousness_level),
+    financial_status = COALESCE($8, financial_status),
+    concerts = COALESCE($9, concerts)
+WHERE id = $1
+`
+
+type UpdateGroupProfileParams struct {
+	ID               int64
+	Name             string
+	City             pgtype.Text
+	FormationDate    pgtype.Int4
+	Platforms        []string
+	Description      pgtype.Text
+	SeriousnessLevel pgtype.Text
+	FinancialStatus  pgtype.Text
+	Concerts         []byte
+	IsVisible        pgtype.Bool
+}
+
+func (q *Queries) UpdateGroupProfile(ctx context.Context, arg UpdateGroupProfileParams) error {
+	_, err := q.db.Exec(ctx, updateGroupProfile,
+		arg.ID,
+		arg.Name,
+		arg.City,
+		arg.FormationDate,
+		arg.Platforms,
+		arg.Description,
+		arg.SeriousnessLevel,
+		arg.FinancialStatus,
+		arg.Concerts,
+		arg.IsVisible,
+	)
+	return err
+}
+
+const updateMemberRole = `-- name: UpdateMemberRole :exec
+UPDATE group_members SET role = $3 WHERE group_id = $1 AND user_id = $2
+`
+
+type UpdateMemberRoleParams struct {
+	GroupID int64
+	UserID  int64
+	Role    string
+}
+
+func (q *Queries) UpdateMemberRole(ctx context.Context, arg UpdateMemberRoleParams) error {
+	_, err := q.db.Exec(ctx, updateMemberRole, arg.GroupID, arg.UserID, arg.Role)
+	return err
 }
 
 const updateUserProfile = `-- name: UpdateUserProfile :exec
@@ -536,7 +1146,6 @@ type UpdateUserProfileParams struct {
 	AudioPath                 pgtype.Text
 }
 
-// Получаем обновленный профиль у юзера
 func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) error {
 	_, err := q.db.Exec(ctx, updateUserProfile,
 		arg.ID,

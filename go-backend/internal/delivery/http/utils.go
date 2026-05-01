@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt"
+	"github.com/katrinani/pivchiki-bot/backend/internal/domain"
 	"github.com/katrinani/pivchiki-bot/backend/internal/metrics"
 )
 
@@ -98,4 +99,17 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		metrics.HttpRequestsTotal.WithLabelValues(r.Method, endpoint, status, "web_app").Inc()
 		metrics.HttpRequestDuration.WithLabelValues(r.Method, endpoint, "web_app").Observe(duration)
 	})
+}
+
+func ToInt8(u uint64) int64 {
+	return int64(u)
+}
+
+func Uint64ToGroupID(i int64) domain.GroupID {
+	return domain.GroupID(i)
+}
+
+func ToUintPtr(i int32) *uint {
+	res := uint(i)
+	return &res
 }

@@ -18,6 +18,16 @@ type UpdateProfile struct {
 	IsVisible            *bool                         `json:"isVisible,omitempty"`
 }
 
+type CreateGroupRequest struct {
+	Name        string   `json:"name"`
+	City        string   `json:"city"`
+	Description string   `json:"description"`
+	Year        uint     `json:"year"`
+	Genres      []string `json:"genres"`
+	Seriousness string   `json:"seriousness"`
+	Financial   string   `json:"financial"`
+}
+
 type CreateProfile struct {
 	UserName    string       `json:"userName,omitempty"`
 	City        string       `json:"city,omitempty"`

@@ -25,7 +25,6 @@ func (e PerformanceExperience) IsValid() bool {
 	return false
 }
 
-// TODO: сделать фото и аудио логику мб клиент или другую хуйню
 type FullProfile struct {
 	ID                   ProfileID
 	UserName             string

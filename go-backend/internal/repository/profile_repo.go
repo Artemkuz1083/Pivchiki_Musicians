@@ -415,7 +415,7 @@ func (r *ProfileRepositoryImpl) AddInteraction(swiper, target domain.ProfileID, 
 	err = qtx.AddInteraction(ctx, db.AddInteractionParams{
 		SwiperUserID: int64(swiper),
 		TargetUserID: int64(target),
-		Action:       pgtype.Text{String: action, Valid: true},
+		Action:       action,
 	})
 	if err != nil {
 		return false, err

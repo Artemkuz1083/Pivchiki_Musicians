@@ -15,6 +15,51 @@ type Account struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+type GroupGenre struct {
+	ID      int32
+	GroupID int64
+	Name    string
+}
+
+type GroupInvitation struct {
+	ID        int32
+	GroupID   int64
+	UserID    int64
+	Role      string
+	Status    string
+	CreatedAt pgtype.Timestamptz
+}
+
+type GroupLikesUser struct {
+	ID            int32
+	SwiperGroupID int64
+	TargetUserID  int64
+	Action        string
+	CreatedAt     pgtype.Timestamptz
+}
+
+type GroupMember struct {
+	ID      int32
+	GroupID int64
+	UserID  int64
+	Role    string
+	IsAdmin bool
+}
+
+type GroupProfile struct {
+	ID               int64
+	Name             string
+	City             pgtype.Text
+	FormationDate    pgtype.Int4
+	Platforms        []string
+	Description      pgtype.Text
+	IsVisible        bool
+	SeriousnessLevel pgtype.Text
+	FinancialStatus  pgtype.Text
+	Concerts         []byte
+	CreatedAt        pgtype.Timestamptz
+}
+
 type Instrument struct {
 	ID               int32
 	UserID           int64
@@ -43,10 +88,18 @@ type UserGenre struct {
 	Name   string
 }
 
+type UserLikesGroup struct {
+	ID            int32
+	SwiperUserID  int64
+	TargetGroupID int64
+	Action        string
+	CreatedAt     pgtype.Timestamptz
+}
+
 type UserLikesUser struct {
 	ID           int32
 	SwiperUserID int64
 	TargetUserID int64
-	Action       pgtype.Text
+	Action       string
 	CreatedAt    pgtype.Timestamptz
 }

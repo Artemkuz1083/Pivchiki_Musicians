@@ -36,14 +36,17 @@ func main() {
 
 	profileRepo := repository.NewProfileRepository(queries, pool)
 	accountRepo := repository.NewAccountRepository(queries, pool)
+	groupRepo := repository.NewGroupProfileRepository(queries, pool)
 
 	profileService := service.NewProfileService(profileRepo)
 	accountService := service.NewAccountService(accountRepo)
+	groupService := service.NewGroupProfileService(groupRepo)
 
 	profileHandler := delivery.NewProfileHandler(profileService)
 	authHandler := delivery.NewAuthHandler(accountService)
+	groupHandler := delivery.NewGroupHandler(groupService)
 
-	router := delivery.NewAppRouter(profileHandler, authHandler)
+	router := delivery.NewAppRouter(profileHandler, authHandler, groupHandler)
 
 	log.Println("Сервер запускается на порту :8080...")
 	const addr = ":8080"

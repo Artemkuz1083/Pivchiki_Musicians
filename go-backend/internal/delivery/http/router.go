@@ -18,6 +18,17 @@ func ProfileRouter(handler *ProfileHandler) http.Handler {
 	return mux
 }
 
+func GroupProfileRouter(handler *GroupHandler) http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /", handler.GetProfile)
+	mux.HandleFunc("PATCH /", handler.UpdateProfile)
+	mux.HandleFunc("POST /", handler.CreateProfile)
+	mux.HandleFunc("DELETE /", handler.DeleteProfile)
+
+	return mux
+}
+
 func PostProfileRouter(handler *ProfileHandler) http.Handler {
 	mux := http.NewServeMux()
 
@@ -25,6 +36,15 @@ func PostProfileRouter(handler *ProfileHandler) http.Handler {
 	mux.HandleFunc("POST /feed/{id}/swipe", handler.Swipe)
 	mux.HandleFunc("POST /media", handler.UploadMedia)
 	mux.HandleFunc("GET /matches", handler.GetMatches)
+
+	return mux
+}
+
+func PostGroupProfileRouter(handler *GroupHandler) http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /feed", handler.GetFeed)
+	mux.HandleFunc("POST /media", handler.UploadGroupMedia)
 
 	return mux
 }
@@ -44,14 +64,23 @@ func PublicRouter(handler *ProfileHandler) http.Handler {
     return mux
 }
 
-func NewAppRouter(profileHandler *ProfileHandler, authHandler *AuthHandler) http.Handler {
+func GroupPublicRouter(handler *GroupHandler) http.Handler {
+    mux := http.NewServeMux()
+    mux.HandleFunc("GET /feed", handler.GetPublicFeed)
+    return mux
+}
+
+func NewAppRouter(profileHandler *ProfileHandler, authHandler *AuthHandler, groupHandler *GroupHandler) http.Handler {
     apiMux := http.NewServeMux()
 
 	apiMux.Handle("/api/v1/public/", http.StripPrefix("/api/v1/public", PublicRouter(profileHandler)))
     
     apiMux.Handle("/api/v1/profile", AuthMiddleWare(ProfileRouter(profileHandler)))
+	apiMux.Handle("/api/v1/groupProfile", AuthMiddleWare(GroupProfileRouter(groupHandler)))
     apiMux.Handle("/api/v1/profile/", http.StripPrefix("/api/v1/profile", AuthMiddleWare(PostProfileRouter(profileHandler))))
     apiMux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", AuthRouter(authHandler)))
+
+
 
     mainMux := http.NewServeMux()
 
