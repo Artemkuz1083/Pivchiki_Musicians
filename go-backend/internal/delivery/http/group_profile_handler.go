@@ -74,7 +74,7 @@ func (h *GroupHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 // @Tags         groups
 // @Accept       json
 // @Produce      json
-// @Param        body  body      domain.FullGroupProfileToUpdate  true  "Данные для обновления (обязательно укажите ID группы)"
+// @Param        body body domain.FullGroupProfileToUpdate true "Данные для обновления"
 // @Success      200   {object}  domain.FullGroupProfile          "Профиль успешно обновлен"
 // @Failure      400   {object}  ErrorMsg                         "Ошибка в данных или отсутствует ID"
 // @Failure      403   {object}  ErrorMsg                         "Недостаточно прав для редактирования этой группы"
@@ -116,6 +116,7 @@ func (h *GroupHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 // @Param        id   query     int    true  "ID группы"
 // @Success      200  {object}  domain.FullGroupProfile  "Данные группы"
 // @Failure      404  {object}  ErrorMsg                 "Группа не найдена"
+// @Security     ApiKeyAuth
 // @Router       /api/v1/groups [get]
 func (h *GroupHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")

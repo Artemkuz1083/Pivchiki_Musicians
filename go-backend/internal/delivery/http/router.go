@@ -59,37 +59,38 @@ func AuthRouter(handler *AuthHandler) http.Handler {
 }
 
 func PublicRouter(handler *ProfileHandler) http.Handler {
-    mux := http.NewServeMux()
-    mux.HandleFunc("GET /feed", handler.GetPublicFeed)
-    return mux
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /feed", handler.GetPublicFeed)
+	return mux
 }
 
 func GroupPublicRouter(handler *GroupHandler) http.Handler {
-    mux := http.NewServeMux()
-    mux.HandleFunc("GET /feed", handler.GetPublicFeed)
-    return mux
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /feed", handler.GetPublicFeed)
+	return mux
 }
 
 func NewAppRouter(profileHandler *ProfileHandler, authHandler *AuthHandler, groupHandler *GroupHandler) http.Handler {
-    apiMux := http.NewServeMux()
+	apiMux := http.NewServeMux()
 
 	apiMux.Handle("/api/v1/public/", http.StripPrefix("/api/v1/public", PublicRouter(profileHandler)))
-    
-    apiMux.Handle("/api/v1/profile", AuthMiddleWare(ProfileRouter(profileHandler)))
-	apiMux.Handle("/api/v1/groupProfile", AuthMiddleWare(GroupProfileRouter(groupHandler)))
-    apiMux.Handle("/api/v1/profile/", http.StripPrefix("/api/v1/profile", AuthMiddleWare(PostProfileRouter(profileHandler))))
-    apiMux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", AuthRouter(authHandler)))
+	apiMux.Handle("/api/v1/public/groups/", http.StripPrefix("/api/v1/public/groups", GroupPublicRouter(groupHandler)))
 
+	apiMux.Handle("/api/v1/profile", AuthMiddleWare(ProfileRouter(profileHandler)))
+	apiMux.Handle("/api/v1/groups", AuthMiddleWare(GroupProfileRouter(groupHandler)))
+	apiMux.Handle("/api/v1/profile/", http.StripPrefix("/api/v1/profile", AuthMiddleWare(PostProfileRouter(profileHandler))))
+	apiMux.Handle("/api/v1/groups/", http.StripPrefix("/api/v1/groups", AuthMiddleWare(PostGroupProfileRouter(groupHandler))))
 
+	apiMux.Handle("/api/v1/auth/", http.StripPrefix("/api/v1/auth", AuthRouter(authHandler)))
 
-    mainMux := http.NewServeMux()
+	mainMux := http.NewServeMux()
 
 	fs := http.FileServer(http.Dir("uploads"))
-    mainMux.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
+	mainMux.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
 
-    mainMux.Handle("/swagger/", httpSwagger.WrapHandler)
-    mainMux.Handle("/metrics", promhttp.Handler())
-    mainMux.Handle("/api/v1/", MetricsMiddleware(apiMux))
+	mainMux.Handle("/swagger/", httpSwagger.WrapHandler)
+	mainMux.Handle("/metrics", promhttp.Handler())
+	mainMux.Handle("/api/v1/", MetricsMiddleware(apiMux))
 
-    return mainMux
+	return mainMux
 }

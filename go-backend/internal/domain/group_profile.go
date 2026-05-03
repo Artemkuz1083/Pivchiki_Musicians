@@ -69,7 +69,8 @@ type FullGroupProfileToUpdate struct {
 	LevelOfSerious  *LevelOfSeriousness
 	FinancialStatus *FinancialStatus
 	Platforms       *[]string
-	Concerts        *map[int]string
+    // @example {"1": "Luzhniki"}
+    Concerts map[string]string `json:"concerts" swaggertype:"object"`
 }
 
 type GroupMember struct {

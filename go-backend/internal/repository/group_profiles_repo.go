@@ -153,7 +153,7 @@ func (r *GroupProfileRepositoryImpl) UpdateGroupProfile(profile *domain.FullGrou
 
 	var concertsJSON []byte
 	if profile.Concerts != nil {
-		concertsJSON, _ = json.Marshal(*profile.Concerts)
+		concertsJSON, _ = json.Marshal(profile.Concerts)
 	}
 
 	err = qtx.UpdateGroupProfile(ctx, db.UpdateGroupProfileParams{
