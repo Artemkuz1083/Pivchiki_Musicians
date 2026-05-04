@@ -3,6 +3,7 @@ import axios from 'axios'
 export const api = axios.create({
 	baseURL: '/api/v1',
 	headers: {
+		'ngrok-skip-browser-warning': 'true',
 		'Content-Type': 'application/json',
 	},
 })
@@ -22,12 +23,9 @@ api.interceptors.request.use(
 	},
 )
 
-//Интерсептор для обработки ошибок 401 (Unauthorized)
 api.interceptors.response.use(
 	response => response,
 	error => {
-		// Если получаем ошибку 401 и это не запрос на логин/регистрацию,
-		// то, скорее всего, токен просрочен или недействителен.
 		if (
 			error.response &&
 			error.response.status === 401 &&

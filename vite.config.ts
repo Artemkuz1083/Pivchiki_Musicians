@@ -20,7 +20,7 @@ export default defineConfig({
 	server: {
 		proxy: {
 			'/api': {
-				target: 'https://41a26052-7573-46b7-9b89-99db3c39f378.tunnel4.com',
+				target: 'https://milo-subdiscoid-ryder.ngrok-free.dev',
 				changeOrigin: true,
 				secure: false,
 			},

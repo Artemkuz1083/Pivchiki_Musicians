@@ -1,5 +1,18 @@
 // types.ts (обновленный)
 export type SkillLevel = number
+export type SeriousnessLevel = 'Кавер-группа' | 'Хобби' | 'Гастролирующий коллектив' | 'Профессионалы';
+
+export interface BandProfile {
+    id: string;
+    bandName: string;
+    foundedYear: number;
+    city: string;
+    genres: string[];
+    description: string;
+    seriousnessLevel: SeriousnessLevel;
+    lookingFor: string[]; // Инструменты, которые ищут
+    imageUrl?: string;
+}
 
 export const SKILL_LEVELS = [
 	{ value: 0, label: 'Новичок' },
@@ -134,3 +147,4 @@ export interface SwipeRequestDto {
 export interface SwipeResponseDto {
 	isMatch?: boolean
 }
+

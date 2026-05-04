@@ -19,9 +19,7 @@ import {
 export const EditProfile = () => {
 	const navigate = useNavigate()
 
-	// =========================
 	// PROFILE STATE
-	// =========================
 	const [userName, setUserName] = useState('')
 	const [aboutUser, setAboutUser] = useState('')
 	const [age, setAge] = useState<number | ''>('')
@@ -46,9 +44,7 @@ export const EditProfile = () => {
 
 	const [isSaving, setIsSaving] = useState(false)
 
-	// =========================
 	// LOAD PROFILE (PRE-FILL)
-	// =========================
 	useEffect(() => {
 		profileService.getMyProfile().then(profile => {
 			setUserName(profile.UserName || '')
@@ -74,9 +70,7 @@ export const EditProfile = () => {
 		})
 	}, [])
 
-	// =========================
 	// TOGGLES
-	// =========================
 	const toggleGenre = (g: string) => {
 		setSelectedGenres(prev =>
 			prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g],
@@ -93,9 +87,7 @@ export const EditProfile = () => {
 		setInstrumentLevels(prev => ({ ...prev, [i]: level }))
 	}
 
-	// =========================
 	// SUBMIT
-	// =========================
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()
 		setIsSaving(true)
@@ -133,10 +125,7 @@ export const EditProfile = () => {
 			setIsSaving(false)
 		}
 	}
-
-	// =========================
 	// UI
-	// =========================
 	return (
 		<div className='min-h-screen bg-[#F8F9FD]'>
 			{/* HEADER */}
