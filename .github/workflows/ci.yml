@@ -7,7 +7,10 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout repo
@@ -23,7 +26,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push bot image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./telegram-bot
           file: ./telegram-bot/Dockerfile
@@ -31,7 +34,7 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/pivchiki_musicians-bot:latest
 
       - name: Build and push backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./go-backend
           file: ./go-backend/Dockerfile
