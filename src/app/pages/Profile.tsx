@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Edit, Eye, Loader2, Heart } from 'lucide-react'
+import {
+	ArrowLeft,
+	Edit,
+	Eye,
+	Loader2,
+	Heart,
+	Users,
+	Music2,
+} from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ProfileCard } from '../components/ProfileCard'
 import { UserProfile } from '../types'
 import { profileService } from '../../api/profileService'
 import { useAuth } from '../../context/AuthContext'
+import { groupService } from '../../api/BandService'
 
 export function Profile() {
 	const navigate = useNavigate()
@@ -105,6 +114,24 @@ export function Profile() {
 		return null
 	}
 
+	const handleMyGroup = async () => {
+		try {
+			const groups = await groupService.getGroupsFeed(10)
+
+			const myGroup = groups.find(g =>
+				g.Members?.some(m => m.UserID === profile.ID),
+			)
+
+			if (myGroup) {
+				navigate(`/groups/${myGroup.ID}`)
+			} else {
+				navigate('/BandRegistration')
+			}
+		} catch (e) {
+			navigate('/BandRegistration')
+		}
+	}
+
 	return (
 		<div className='min-h-screen bg-gray-50 pb-10'>
 			<div className='bg-[#60519B] text-white p-4 sticky top-0 z-10 shadow-md'>
@@ -161,12 +188,28 @@ export function Profile() {
 					</Button>
 
 					<Button
+						onClick={() => navigate('/GroupFeed')}
+						className='w-full bg-[#E6F7FF] hover:bg-[#D6F0FF] text-[#1E88E5] py-7 text-lg rounded-xl shadow-sm border border-[#BFE3FF]'
+					>
+						<Music2 className='w-5 h-5 mr-2' />
+						Поиск групп
+					</Button>
+
+					<Button
+						onClick={handleMyGroup}
+						className='w-full bg-[#E9E6FF] hover:bg-[#DDD8FF] text-[#60519B] py-7 text-lg rounded-xl shadow-sm border border-[#D6D1F5]'
+					>
+						<Users className='w-5 h-5 mr-2' />
+						Моя группа
+					</Button>
+
+					<Button
 						onClick={() => navigate('/browse')}
 						variant='outline'
 						className='w-full py-7 text-lg rounded-xl border-2 border-[#BFC0D1] text-[#31323E] hover:bg-gray-100 transition-colors'
 					>
 						<Eye className='w-5 h-5 mr-2' />
-						Смотреть другие анкеты
+						Поиск музыкантов
 					</Button>
 
 					<Button

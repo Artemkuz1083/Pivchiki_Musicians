@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Info, ArrowLeft } from 'lucide-react'
+import { Loader2, ArrowLeft } from 'lucide-react'
 import { groupService } from '../../api/BandService'
 import { Button } from '../components/ui/button'
+import { CITIES } from '../types/index'
 
 export default function BandRegistration() {
 	const navigate = useNavigate()
 	const [loading, setLoading] = useState(false)
+
 	const [formData, setFormData] = useState({
 		name: '',
 		description: '',
@@ -20,10 +22,16 @@ export default function BandRegistration() {
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()
 		setLoading(true)
+
 		try {
-			const group = await groupService.createGroup(formData)
-			navigate(`/groups/${group.ID}`)
+			const group = await groupService.createGroup({
+				...formData,
+				year: Number(formData.year),
+			})
+
+			navigate(`/groups/${group.ID ?? group.ID}`)
 		} catch (err) {
+			console.error(err)
 			alert('Ошибка при создании группы')
 		} finally {
 			setLoading(false)
@@ -46,7 +54,7 @@ export default function BandRegistration() {
 			</div>
 
 			<div className='max-w-md mx-auto p-4'>
-				{/* Info / Hero Card */}
+				{/* Hero */}
 				<div className='bg-gradient-to-r from-[#60519B] to-[#31323E] rounded-xl p-5 mb-6 text-white shadow-lg'>
 					<h2 className='text-lg font-medium mb-1'>Новая группа</h2>
 					<p className='text-sm opacity-80'>
@@ -54,7 +62,6 @@ export default function BandRegistration() {
 					</p>
 				</div>
 
-				{/* Form */}
 				<form onSubmit={handleSubmit} className='space-y-4'>
 					{/* Название */}
 					<div className='bg-white rounded-xl p-4 shadow-sm'>
@@ -74,9 +81,34 @@ export default function BandRegistration() {
 							placeholder='Расскажите о стиле, целях и участниках'
 							className='w-full p-3 border border-gray-200 rounded-xl min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-[#60519B]'
 							onChange={e =>
-								setFormData({ ...formData, description: e.target.value })
+								setFormData({
+									...formData,
+									description: e.target.value,
+								})
 							}
 						/>
+					</div>
+
+					{/* Город */}
+					<div className='bg-white rounded-xl p-4 shadow-sm'>
+						<p className='text-sm text-gray-500 mb-2'>Город</p>
+
+						<select
+							className='w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#60519B]'
+							value={formData.city}
+							onChange={e => setFormData({ ...formData, city: e.target.value })}
+							required
+						>
+							<option value='' disabled>
+								Выберите город
+							</option>
+
+							{CITIES.map(city => (
+								<option key={city} value={city}>
+									{city}
+								</option>
+							))}
+						</select>
 					</div>
 
 					{/* Уровень */}
@@ -91,6 +123,21 @@ export default function BandRegistration() {
 							<option value='HOBBY'>Хобби</option>
 							<option value='SEMI_PROFESSIONAL'>Полупрофи</option>
 							<option value='PROFESSIONAL'>Профи</option>
+						</select>
+					</div>
+
+					{/* Финансы */}
+					<div className='bg-white rounded-xl p-4 shadow-sm'>
+						<p className='text-sm text-gray-500 mb-2'>Финансовый уровень</p>
+						<select
+							className='w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#60519B]'
+							onChange={e =>
+								setFormData({ ...formData, financial: e.target.value })
+							}
+						>
+							<option value='POOR'>Без бюджета</option>
+							<option value='MEDIUM'>Средний</option>
+							<option value='RICH'>Есть бюджет</option>
 						</select>
 					</div>
 

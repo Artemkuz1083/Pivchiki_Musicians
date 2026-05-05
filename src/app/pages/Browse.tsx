@@ -186,53 +186,53 @@ export function Browse() {
 		)
 	}
 
+	const Header = () => (
+		<header className='bg-[#60519B] text-white p-4 sticky top-0 z-10 shadow-md'>
+			<div className='max-w-md mx-auto flex items-center justify-between'>
+				<div className='flex items-center gap-3'>
+					<button
+						onClick={() => navigate(-1)}
+						className='p-2 hover:bg-white/10 rounded-full transition'
+					>
+						<ArrowLeft className='w-6 h-6' />
+					</button>
+
+					<h1 className='text-lg font-semibold'>Поиск музыкантов</h1>
+				</div>
+
+				{isAuth && (
+					<button
+						onClick={() => setShowFilters(true)}
+						className='w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition'
+					>
+						<Filter size={20} />
+					</button>
+				)}
+			</div>
+		</header>
+	)
+
 	const currentProfile = filteredProfiles[currentIndex]
 
 	return (
 		<div className='min-h-screen bg-[#F8F9FD] flex flex-col'>
-			{/* HEADER */}
-			<div className='bg-[#60519B] text-white p-4 sticky top-0 z-10 shadow-md'>
-				<div className='max-w-md mx-auto flex items-center justify-between'>
-					<div className='flex items-center gap-3'>
-						<button
-							onClick={() => navigate(-1)}
-							className='p-2 hover:bg-white/10 rounded-full transition-colors'
-						>
-							<ArrowLeft className='w-6 h-6' />
-						</button>
+			<Header />
 
-						<h1 className='text-lg font-semibold'>Поиск музыкантов</h1>
-					</div>
-
-					{isAuth && (
-						<button
-							onClick={() => setShowFilters(true)}
-							className='w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition'
-						>
-							<Filter size={20} />
-						</button>
-					)}
-				</div>
-			</div>
-
-			{/* MAIN */}
 			<main className='flex-1 flex items-center justify-center p-4'>
 				<div className='w-full max-w-md flex flex-col items-center'>
-					{/* CARD */}
 					{isAuth ? (
-						<div className='w-full animate-in fade-in zoom-in duration-300'>
+						<div className='w-full'>
 							<BrowseCard
 								profile={currentProfile}
 								imageUrl={`https://loremflickr.com/600/400?lock=${currentProfile.ID}`}
 							/>
 						</div>
 					) : (
-						<div className='w-full space-y-5 animate-in slide-in-from-bottom-4 duration-500'>
-							<div className='relative h-[220px] w-full rounded-3xl overflow-hidden grayscale opacity-40'>
+						<div className='w-full space-y-5'>
+							<div className='relative h-[220px] rounded-3xl overflow-hidden grayscale opacity-40'>
 								<img
 									src={`https://loremflickr.com/600/400?lock=${currentProfile.ID}`}
 									className='w-full h-full object-cover blur-md'
-									alt='Locked profile'
 								/>
 								<div className='absolute inset-0 flex items-center justify-center'>
 									<Lock className='text-white w-12 h-12 opacity-60' />
@@ -241,22 +241,21 @@ export function Browse() {
 
 							<PublicPreviewCard profile={currentProfile} />
 
-							<div className='bg-white p-6 rounded-3xl border border-dashed border-[#60519B]/30 text-center shadow-sm'>
-								<p className='text-gray-600 text-sm mb-4'>
-									Хотите увидеть больше информации и связаться с этим
-									музыкантом?
+							<div className='bg-white p-6 rounded-3xl border text-center shadow-sm'>
+								<p className='text-sm text-gray-600 mb-4'>
+									Зарегистрируйтесь, чтобы открыть полный профиль
 								</p>
 
 								<button
 									onClick={() => navigate('/registration')}
-									className='w-full py-4 bg-[#60519B] text-white rounded-2xl font-bold shadow-md hover:scale-[1.02] transition active:scale-95'
+									className='w-full py-4 bg-[#60519B] text-white rounded-2xl font-bold'
 								>
 									Зарегистрироваться
 								</button>
 
 								<button
 									onClick={() => handleSwipe('dislike')}
-									className='mt-4 text-[#60519B] text-xs font-bold uppercase tracking-widest opacity-60 hover:opacity-100 transition'
+									className='mt-4 text-xs text-[#60519B] font-bold opacity-60'
 								>
 									Следующий профиль
 								</button>
@@ -264,28 +263,26 @@ export function Browse() {
 						</div>
 					)}
 
-					{/* BUTTONS (фикс под карточкой) */}
 					{isAuth && (
 						<div className='flex gap-4 w-full mt-6'>
 							<button
 								onClick={() => handleSwipe('dislike')}
-								className='flex-1 h-16 bg-white rounded-2xl flex items-center justify-center text-gray-400 shadow-md hover:text-red-500 transition active:scale-95 border border-gray-100'
+								className='flex-1 h-16 bg-white rounded-2xl flex items-center justify-center shadow-md'
 							>
-								<X size={28} strokeWidth={3} />
+								<X size={28} />
 							</button>
 
 							<button
 								onClick={() => handleSwipe('like')}
-								className='flex-1 h-16 bg-[#60519B] rounded-2xl flex items-center justify-center text-white shadow-md hover:bg-[#4d3f7e] transition active:scale-95'
+								className='flex-1 h-16 bg-[#60519B] rounded-2xl flex items-center justify-center text-white'
 							>
-								<Heart size={28} strokeWidth={3} fill='currentColor' />
+								<Heart size={28} fill='currentColor' />
 							</button>
 						</div>
 					)}
 				</div>
 			</main>
 
-			{/* FILTER */}
 			<FilterSheet
 				isOpen={showFilters}
 				onClose={() => setShowFilters(false)}

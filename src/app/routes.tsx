@@ -9,6 +9,7 @@ import { LoginPage as Login } from './pages/Login'
 import { Matches } from './pages/Matches'
 import { EditProfile } from './pages/EditProfile'
 import BandRegistration from './pages/BandRegistration'
+import GroupFeed from './pages/GroupsFeed'
 
 import { ProtectedRoute } from './ProtectedRoute'
 
@@ -30,6 +31,10 @@ export const router = createBrowserRouter([
 		path: '/registration-success',
 		Component: RegistrationSuccess,
 	},
+	{
+		path: '/browse',
+		Component: Browse,
+	},
 
 	// PROTECTED GROUP
 	{
@@ -38,10 +43,6 @@ export const router = createBrowserRouter([
 			{
 				path: '/profile',
 				Component: Profile,
-			},
-			{
-				path: '/browse',
-				Component: Browse,
 			},
 			{
 				path: '/matches',
@@ -54,6 +55,10 @@ export const router = createBrowserRouter([
 			{
 				path: '/BandRegistration',
 				Component: BandRegistration,
+			},
+			{
+				path: '/GroupFeed',
+				Component: GroupFeed,
 			},
 		],
 	},
