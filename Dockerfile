@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY . .
 
@@ -12,7 +12,7 @@ ENV CI=false
 ENV NPM_CONFIG_LOGLEVEL=verbose
 
 # 🔥 принудительно показываем ошибки
-RUN npm run build 2>&1 | tee build.log
+RUN npm run build --debug
 
 FROM nginx:stable-alpine
 
