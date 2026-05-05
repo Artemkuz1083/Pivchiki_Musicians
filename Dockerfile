@@ -7,16 +7,12 @@ RUN npm ci
 
 COPY . .
 
-# 🔥 включаем максимум логов для CI
-ENV CI=true
+# 🔥 ПОЛНЫЕ ЛОГИ npm
+ENV CI=false
 ENV NPM_CONFIG_LOGLEVEL=verbose
 
-# 🔥 вывод зависимостей (помогает ловить сломанные пакеты)
-RUN npm ls || true
-
-# 🔥 билд с подробным выводом
-RUN npm run build || (echo "❌ BUILD FAILED" && exit 1)
-
+# 🔥 принудительно показываем ошибки
+RUN npm run build 2>&1 | tee build.log
 
 FROM nginx:stable-alpine
 
