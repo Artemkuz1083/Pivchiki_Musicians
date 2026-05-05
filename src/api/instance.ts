@@ -3,7 +3,6 @@ import axios from 'axios'
 export const api = axios.create({
 	baseURL: '/api/v1',
 	headers: {
-		'ngrok-skip-browser-warning': 'true',
 		'Content-Type': 'application/json',
 	},
 })

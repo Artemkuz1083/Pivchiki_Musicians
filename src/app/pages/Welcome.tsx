@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router'
+import { useNavigate } from 'react-router-dom'
 import { Music2, Eye, LogIn } from 'lucide-react'
 import { Button } from '../components/ui/button'
 

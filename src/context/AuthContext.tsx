@@ -1,39 +1,49 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react'
 
 interface AuthContextType {
-  isLoggedIn: boolean;
-  token: string | null;
-  login: (token: string) => void;
-  logout: () => void;
+	isLoggedIn: boolean
+	token: string | null
+	login: (token: string) => void
+	logout: () => void
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const STORAGE_KEY = 'authToken'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('api_token'));
+	// синхронно читаем токен (без useEffect → нет мигания)
+	const [token, setToken] = useState<string | null>(() => {
+		if (typeof window === 'undefined') return null
+		return localStorage.getItem(STORAGE_KEY)
+	})
 
-  const login = (newToken: string) => {
-    localStorage.setItem('api_token', newToken);
-    setToken(newToken);
-  };
+	const login = (newToken: string) => {
+		localStorage.setItem(STORAGE_KEY, newToken)
+		setToken(newToken)
+	}
 
-  const logout = () => {
-    localStorage.removeItem('api_token');
-    setToken(null);
-  };
+	const logout = () => {
+		localStorage.removeItem(STORAGE_KEY)
+		setToken(null)
+	}
 
-  const isLoggedIn = !!token; // превращаем наличие токена в true/false
-
-  return (
-    <AuthContext.Provider value={{ isLoggedIn, token, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+	return (
+		<AuthContext.Provider
+			value={{
+				token,
+				isLoggedIn: !!token,
+				login,
+				logout,
+			}}
+		>
+			{children}
+		</AuthContext.Provider>
+	)
 }
 
-// Хук для удобного использования в компонентах
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
-};
+	const ctx = useContext(AuthContext)
+	if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+	return ctx
+}

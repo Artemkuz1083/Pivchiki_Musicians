@@ -1,19 +1,13 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { authService } from '../../api/AuthService'
 
 export function LoginPage() {
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
-	const { login, isLoggedIn } = useAuth()
+	const { login } = useAuth()
 	const navigate = useNavigate()
-
-	useEffect(() => {
-		if (isLoggedIn!) {
-			navigate('/profile', { replace: true })
-		}
-	}, [isLoggedIn, navigate])
 
 	const handleFormSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()

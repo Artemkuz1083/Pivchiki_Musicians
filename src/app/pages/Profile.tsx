@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Edit, Eye, Loader2, Heart } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { ProfileCard } from '../components/ProfileCard'
@@ -14,18 +14,58 @@ export function Profile() {
 	const { logout } = useAuth()
 
 	useEffect(() => {
+		console.log('🟣 PROFILE MOUNT')
+
+		let isMounted = true
+
 		const loadProfile = async () => {
+			console.log('🟡 loadProfile START')
+
 			try {
+				console.log('🟡 calling profileService.getMyProfile()')
+
 				const data = await profileService.getMyProfile()
+
+				console.log('🟢 PROFILE RESPONSE:', data)
+
+				if (!isMounted) {
+					console.log('🔴 component unmounted, abort')
+					return
+				}
+
+				console.log('🟡 CHECK data.id:', data?.ID)
+
+				if (!data?.ID) {
+					console.log('🔴 NO ID → redirect to /login')
+					navigate('/login', { replace: true })
+					return
+				}
+
+				console.log('🟢 SET PROFILE')
 				setProfile(data)
-			} catch (error) {
-				console.error('Не удалось загрузить профиль', error)
+			} catch (error: any) {
+				console.log('🔴 ERROR CAUGHT:', error)
+				console.log('🔴 STATUS:', error?.response?.status)
+
+				if (error?.response?.status === 401 && isMounted) {
+					console.log('🔴 401 → redirect to /login')
+					navigate('/login', { replace: true })
+				}
 			} finally {
-				setIsLoading(false)
+				console.log('🟣 FINALLY')
+				if (isMounted) {
+					setIsLoading(false)
+				}
 			}
 		}
+
 		loadProfile()
-	}, [])
+
+		return () => {
+			console.log('🟣 PROFILE UNMOUNT')
+			isMounted = false
+		}
+	}, [navigate])
 
 	const calculateProgress = (p: UserProfile | null): number => {
 		if (!p) return 0
@@ -53,20 +93,16 @@ export function Profile() {
 		)
 	}
 
-	if (!profile || !profile.ID) {
+	if (!profile) {
 		return (
-			<div className='min-h-screen bg-gray-50 flex items-center justify-center p-4'>
-				<div className='text-center bg-white p-8 rounded-2xl shadow-sm border border-gray-100'>
-					<p className='text-gray-600 mb-6 text-lg'>У вас пока нет профиля</p>
-					<Button
-						onClick={() => navigate('/registration')}
-						className='bg-[#60519B] hover:bg-[#4d3f7e] px-8 py-6 rounded-xl text-lg'
-					>
-						Создать анкету
-					</Button>
-				</div>
+			<div className='min-h-screen bg-gray-50 flex items-center justify-center'>
+				<p className='text-gray-500'>Загрузка...</p>
 			</div>
 		)
+	}
+
+	if (!profile.ID) {
+		return null
 	}
 
 	return (
@@ -74,7 +110,7 @@ export function Profile() {
 			<div className='bg-[#60519B] text-white p-4 sticky top-0 z-10 shadow-md'>
 				<div className='max-w-md mx-auto flex items-center gap-3'>
 					<button
-						onClick={() => navigate('/browse')}
+						onClick={() => navigate('/')}
 						className='p-1 hover:bg-white/10 rounded-full transition-colors'
 					>
 						<ArrowLeft className='w-6 h-6' />

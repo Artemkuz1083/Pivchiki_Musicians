@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Loader2, User } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { profileService } from '../../api/profileService'

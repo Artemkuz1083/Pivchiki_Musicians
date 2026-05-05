@@ -1,17 +1,16 @@
-
 export interface UpdateProfileDto {
-  UserName?: string;
-  AboutUser?: string;
-  Age?: number;
-  City?: string;
-  Contact?: string;
-  Genres?: string[];
-  Instruments?: {
-    Instrument: string;
-    InstrumentProficiencyLevel: number;
-  }[];
-  IsVisible?: boolean;
-  Link?: string;
-  PerformancExperience?: 'NEVER' | 'LOCAL_GIGS' | 'TOURS' | 'PROFESSIONAL';
-  TheoryLevel?: number;
+	userName?: string
+	aboutUser?: string
+	age?: number
+	city?: string
+	contact?: string
+	genres?: string[]
+	instruments?: {
+		instrument: string
+		instrumentProficiencyLevel: number
+	}[]
+	isVisible?: boolean
+	link?: string
+	performancExperience?: 'NEVER' | 'LOCAL_GIGS' | 'TOURS' | 'PROFESSIONAL'
+	theoryLevel?: number
 }

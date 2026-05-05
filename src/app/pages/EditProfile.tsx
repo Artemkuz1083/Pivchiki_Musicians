@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router'
-import { ArrowLeft, Check, Loader2, User } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, Check, Loader2, User, Music, ImageIcon } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Checkbox } from '../components/ui/checkbox'
 import { Label } from '../components/ui/label'
@@ -39,9 +39,13 @@ export const EditProfile = () => {
 	>({})
 
 	// media
+	// FILES (новые, которые пользователь выбрал)
 	const [photo, setPhoto] = useState<File | null>(null)
 	const [audio, setAudio] = useState<File | null>(null)
 
+	// URL (то, что пришло с сервера)
+	const [photoURL, setPhotoURL] = useState<string>('')
+	const [audioURL, setAudioURL] = useState<string>('')
 	const [isSaving, setIsSaving] = useState(false)
 
 	// LOAD PROFILE (PRE-FILL)
@@ -49,12 +53,12 @@ export const EditProfile = () => {
 		profileService.getMyProfile().then(profile => {
 			setUserName(profile.UserName || '')
 			setAboutUser(profile.AboutUser || '')
-			setAge(profile.Age || '')
+			setAge(profile.Age ?? 0)
 			setCity(profile.City || '')
 			setContact(profile.Contact || '')
 			setLink(profile.Link || '')
 			setIsVisible(profile.IsVisible ?? true)
-			setTheoryLevel(profile.TheoryLevel || 1)
+			setTheoryLevel(profile.TheoryLevel ?? 1)
 			setExperience(profile.PerformancExperience || 'NEVER')
 
 			setSelectedGenres(profile.Genres || [])
@@ -67,6 +71,10 @@ export const EditProfile = () => {
 				levels[i.Instrument] = i.InstrumentProficiencyLevel
 			})
 			setInstrumentLevels(levels)
+
+			// 👉 если используешь медиа — сразу сюда
+			setPhotoURL(profile.PhotoURL || '')
+			setAudioURL(profile.AudioURL || '')
 		})
 	}, [])
 
@@ -100,28 +108,23 @@ export const EditProfile = () => {
 				City: city,
 				Contact: contact,
 				Genres: selectedGenres,
-				Instruments: selectedInstruments.map(
-					(inst): InstrumentSkill => ({
-						Instrument: inst,
-						InstrumentProficiencyLevel: instrumentLevels[inst] || 0,
-					}),
-				),
+				Instruments: selectedInstruments.map(inst => ({
+					Instrument: inst,
+					InstrumentProficiencyLevel: instrumentLevels[inst] || 0,
+				})),
 				IsVisible: isVisible,
 				Link: link,
 				PerformancExperience: experience,
 				TheoryLevel: theoryLevel,
 			})
-
 			if (photo) await profileService.uploadMedia(photo, 'photo')
 			if (audio) await profileService.uploadMedia(audio, 'audio')
 
-			// 👉 сначала навигация
 			navigate('/profile', { replace: true })
 		} catch (e) {
 			console.error(e)
 			alert('Ошибка обновления профиля')
 		} finally {
-			// 👉 можно оставить, но это уже не критично
 			setIsSaving(false)
 		}
 	}
@@ -274,19 +277,74 @@ export const EditProfile = () => {
 				</div>
 
 				{/* MEDIA */}
-				<div className='bg-white p-5 rounded-2xl space-y-3'>
-					<h2 className='font-bold'>Медиа</h2>
+				<div className='space-y-4'>
+					<h2 className='text-lg font-semibold px-1'>Медиа</h2>
 
-					<input
-						type='file'
-						accept='image/*'
-						onChange={e => setPhoto(e.target.files?.[0] || null)}
-					/>
-					<input
-						type='file'
-						accept='audio/*'
-						onChange={e => setAudio(e.target.files?.[0] || null)}
-					/>
+					{/* ФОТО */}
+					<div className='bg-white p-5 rounded-xl shadow-sm space-y-3'>
+						<p className='text-sm text-gray-500'>Фотография</p>
+
+						{/* PREVIEW */}
+						{(photo || photoURL) && (
+							<img
+								src={photo ? URL.createObjectURL(photo) : photoURL}
+								alt='profile'
+								className='w-full h-40 object-cover rounded-xl'
+							/>
+						)}
+
+						<label className='flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#60519B]/30 rounded-xl cursor-pointer hover:bg-[#F3F0FF] transition'>
+							<div className='flex flex-col items-center gap-2 text-[#60519B]'>
+								<ImageIcon className='w-6 h-6' />
+								<span className='text-sm font-medium'>
+									{photo
+										? photo.name
+										: photoURL
+											? 'Заменить фото'
+											: 'Загрузить фото'}
+								</span>
+							</div>
+
+							<input
+								type='file'
+								accept='image/*'
+								className='hidden'
+								onChange={e => setPhoto(e.target.files?.[0] || null)}
+							/>
+						</label>
+					</div>
+
+					{/* АУДИО */}
+					<div className='bg-white p-5 rounded-xl shadow-sm space-y-3'>
+						<p className='text-sm text-gray-500'>Аудио</p>
+
+						{/* PLAYER */}
+						{(audio || audioURL) && (
+							<audio controls className='w-full'>
+								<source src={audio ? URL.createObjectURL(audio) : audioURL} />
+							</audio>
+						)}
+
+						<label className='flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-[#60519B]/30 rounded-xl cursor-pointer hover:bg-[#F3F0FF] transition'>
+							<div className='flex flex-col items-center gap-2 text-[#60519B]'>
+								<Music className='w-6 h-6' />
+								<span className='text-sm font-medium'>
+									{audio
+										? audio.name
+										: audioURL
+											? 'Заменить аудио'
+											: 'Загрузить аудио'}
+								</span>
+							</div>
+
+							<input
+								type='file'
+								accept='audio/*'
+								className='hidden'
+								onChange={e => setAudio(e.target.files?.[0] || null)}
+							/>
+						</label>
+					</div>
 				</div>
 
 				{/* VISIBLE */}

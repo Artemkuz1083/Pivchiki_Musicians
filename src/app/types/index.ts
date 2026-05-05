@@ -1,17 +1,21 @@
 // types.ts (обновленный)
 export type SkillLevel = number
-export type SeriousnessLevel = 'Кавер-группа' | 'Хобби' | 'Гастролирующий коллектив' | 'Профессионалы';
+export type SeriousnessLevel =
+	| 'Кавер-группа'
+	| 'Хобби'
+	| 'Гастролирующий коллектив'
+	| 'Профессионалы'
 
 export interface BandProfile {
-    id: string;
-    bandName: string;
-    foundedYear: number;
-    city: string;
-    genres: string[];
-    description: string;
-    seriousnessLevel: SeriousnessLevel;
-    lookingFor: string[]; // Инструменты, которые ищут
-    imageUrl?: string;
+	id: string
+	bandName: string
+	foundedYear: number
+	city: string
+	genres: string[]
+	description: string
+	seriousnessLevel: SeriousnessLevel
+	lookingFor: string[] // Инструменты, которые ищут
+	imageUrl?: string
 }
 
 export const SKILL_LEVELS = [
@@ -35,16 +39,22 @@ export interface InstrumentSkill {
 export interface UserProfile {
 	ID: number
 	UserName: string
-	AboutUser: string
-	Age: number
+	AboutUser: string | null
+	Age: number | null
 	City: string
 	Contact: string
 	Genres: string[]
-	Instruments: InstrumentSkill[]
+	Instruments: {
+		Instrument: string
+		InstrumentProficiencyLevel: number
+	}[]
 	IsVisible: boolean
-	Link: string
-	PerformancExperience: PerformanceExperience
-	TheoryLevel: number
+	Link: string | null
+	PerformancExperience: PerformanceExperience | null
+	TheoryLevel: number | null
+
+	PhotoURL: string | null
+	AudioURL: string | null
 }
 
 // Новый DTO для создания профиля (POST /api/v1/profile)
@@ -147,4 +157,3 @@ export interface SwipeRequestDto {
 export interface SwipeResponseDto {
 	isMatch?: boolean
 }
-
