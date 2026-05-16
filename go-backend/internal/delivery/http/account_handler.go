@@ -18,68 +18,126 @@ func NewAuthHandler(s service.AccountService) *AuthHandler {
 
 // Registry godoc
 // @Summary      Регистрация нового аккаунта
-// @Description  Создает аккаунт и возвращает JWT токен. Поле is_profile_created всегда false.
+// @Description  Создает аккаунт, устанавливает HttpOnly сессионную куку refresh_token и возвращает Access JWT токен. Поле is_profile_created всегда false.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
 // @Param        body  body      delivery.AuthRequest  true  "Данные для регистрации"
 // @Success      201   {object}  delivery.AuthResponse
-// @Failure      400   {object}  delivery.ErrorMsg
-// @Failure      409   {object}  delivery.ErrorMsg
+// @Header       201   {string}  Set-Cookie            "refresh_token=...; Path=/api/v1/auth; HttpOnly; Max-Age=2592000"
+// @Failure      400   {object}  delivery.ErrorMsg     "Некорректный JSON"
+// @Failure      409   {object}  delivery.ErrorMsg     "Логин уже занят или ошибка базы"
 // @Router       /api/v1/auth/registry [post]
 func (h *AuthHandler) Registry(w http.ResponseWriter, r *http.Request) {
-	//TODO мб поменять потом пароль более безопаснее сделать
-	var req AuthRequest
-	//TODO поменять ошибки на  фиксированные а реальные записывать в логи
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		msg := ErrorMsg{Message: err.Error()}
-		JSONError(w, msg, http.StatusBadRequest)
-		return
-	}
+    var req AuthRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
+        return
+    }
 
-	//TODO валидация имени и пароля
-	token, err := h.Service.Registry(&domain.Account{
-		Login:        req.Login,
-		PasswordHash: req.Password,
-	})
-	if err != nil {
-		msg := ErrorMsg{Message: err.Error()}
-		JSONError(w, msg, http.StatusConflict)
-		return
-	}
+    accessToken, refreshToken, err := h.Service.Registry(&domain.Account{
+        Login:        req.Login,
+        PasswordHash: req.Password,
+    })
+    if err != nil {
+        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusConflict)
+        return
+    }
 
-	renderJSON(w, http.StatusCreated, AuthResponse{
-		Token:            token,
-		IsProfileCreated: false,
-	})
+    http.SetCookie(w, &http.Cookie{
+        Name:     "refresh_token",
+        Value:    refreshToken,
+        Path:     "/",
+        HttpOnly: true,
+        Secure:   false,
+        SameSite: http.SameSiteLaxMode,
+        MaxAge:   30 * 24 * 60 * 60,
+    })
+
+    renderJSON(w, http.StatusCreated, AuthResponse{
+        Token:            accessToken,
+        IsProfileCreated: false,
+    })
 }
 
 // Login godoc
 // @Summary      Вход в систему
-// @Description  Проверяет учетные данные и возвращает токен + флаг наличия профиля.
+// @Description  Проверяет учетные данные, устанавливает HttpOnly сессионную куку refresh_token и возвращает Access JWT токен + флаг наличия профиля.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
 // @Param        body  body      delivery.AuthRequest  true  "Данные для входа"
 // @Success      200   {object}  delivery.AuthResponse
-// @Failure      401   {object}  delivery.ErrorMsg
+// @Header       200   {string}  Set-Cookie            "refresh_token=...; Path=/api/v1/auth; HttpOnly; Max-Age=2592000"
+// @Failure      400   {object}  delivery.ErrorMsg     "Некорректный JSON"
+// @Failure      401   {object}  delivery.ErrorMsg     "Неверный логин или пароль"
 // @Router       /api/v1/auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	var req AuthRequest
-	json.NewDecoder(r.Body).Decode(&req)
+    var req AuthRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
+        return
+    }
 
-	token, hasProfile, err := h.Service.Login(&domain.Account{
-		Login:        req.Login,
-		PasswordHash: req.Password,
-	})
+    accessToken, refreshToken, hasProfile, err := h.Service.Login(&domain.Account{
+        Login:        req.Login,
+        PasswordHash: req.Password,
+    })
+    if err != nil {
+        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusUnauthorized)
+        return
+    }
+
+    http.SetCookie(w, &http.Cookie{
+        Name:     "refresh_token",
+        Value:    refreshToken,
+        Path:     "/",
+        HttpOnly: true,
+        Secure:   false,
+        SameSite: http.SameSiteLaxMode,
+        MaxAge:   30 * 24 * 60 * 60,
+    })
+
+    renderJSON(w, http.StatusOK, AuthResponse{
+        Token:            accessToken,
+        IsProfileCreated: hasProfile,
+    })
+}
+
+// Refresh godoc
+// @Summary      Обновить Access-токен
+// @Description  Принимает Refresh-токен из HttpOnly-куки, проверяет его и выдает новую пару токенов (Access и Refresh).
+// @Tags         auth
+// @Produce      json
+// @Success      200  {object}  map[string]string "Возвращает новый access_token"
+// @Failure      401  {object}  ErrorMsg          "Токен невалиден или протух"
+// @Router       /api/v1/auth/refresh [post]
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		msg := ErrorMsg{Message: err.Error()}
-		JSONError(w, msg, http.StatusUnauthorized)
+		JSONError(w, ErrorMsg{"Refresh token not found"}, http.StatusUnauthorized)
 		return
 	}
 
-	renderJSON(w, http.StatusOK, AuthResponse{
-        Token:            token,
-        IsProfileCreated: hasProfile,
-    })
+	refreshToken := cookie.Value
+
+	newAccessToken, newRefreshToken, err := h.Service.RefreshTokens(refreshToken)
+	if err != nil {
+		JSONError(w, ErrorMsg{"Invalid or expired refresh token"}, http.StatusUnauthorized)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefreshToken,
+		Path:     "/", // Доступно только для auth-ручек ради безопасности
+		HttpOnly: true,           // Защита от кражи через JS (XSS)
+		Secure:   false,          // Поставь true на продакшене (требует HTTPS)
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   30 * 24 * 60 * 60, // 30 дней в секундах
+	})
+
+	renderJSON(w, http.StatusOK, map[string]string{
+		"access_token": newAccessToken,
+	})
 }

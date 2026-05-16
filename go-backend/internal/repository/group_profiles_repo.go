@@ -211,19 +211,35 @@ func (r *GroupProfileRepositoryImpl) GetFeedGroupProfiles(userID domain.ProfileI
 }
 
 func (r *GroupProfileRepositoryImpl) GetPublicFeedGroup(limit int) ([]*domain.FullGroupProfile, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
 
-	rows, err := r.queries.GetPublicGroupFeed(ctx, int32(limit))
-	if err != nil {
-		return nil, err
-	}
+    rows, err := r.queries.GetPublicGroupFeed(ctx, int32(limit))
+    if err != nil {
+        return nil, err
+    }
 
-	result := make([]*domain.FullGroupProfile, 0, len(rows))
-	for _, row := range rows {
-		result = append(result, r.mapFeedRowToGroup(db.GetGroupFeedRow(row)))
-	}
-	return result, nil
+    result := make([]*domain.FullGroupProfile, 0, len(rows))
+    for _, row := range rows {
+        feedRow := db.GetGroupFeedRow{
+            ID:               row.ID,
+            Name:             row.Name,
+            City:             row.City,
+            FormationDate:    row.FormationDate,
+            Platforms:        row.Platforms,
+            Description:      row.Description,
+            IsVisible:        row.IsVisible,
+            SeriousnessLevel: row.SeriousnessLevel,
+            FinancialStatus:  row.FinancialStatus,
+            Concerts:         row.Concerts,
+            CreatedAt:        row.CreatedAt,
+            Genres:           row.Genres,
+            Members:          row.Members,
+        }
+        
+        result = append(result, r.mapFeedRowToGroup(feedRow))
+    }
+    return result, nil
 }
 
 // --- INTERACTIONS & MATCHES ---
@@ -369,15 +385,42 @@ func (r *GroupProfileRepositoryImpl) GetUserGroups(userID domain.ProfileID) ([]d
 
 func (r *GroupProfileRepositoryImpl) mapFeedRowToGroup(row db.GetGroupFeedRow) *domain.FullGroupProfile {
 	var members []domain.GroupMember
-	if b, ok := row.Members.([]byte); ok {
-		_ = json.Unmarshal(b, &members)
+
+	if row.Members != nil {
+		switch v := row.Members.(type) {
+		case []byte:
+			_ = json.Unmarshal(v, &members)
+		case string:
+			_ = json.Unmarshal([]byte(v), &members)
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				_ = json.Unmarshal(b, &members)
+			}
+		}
 	}
 
 	var concerts map[int]string
-	_ = json.Unmarshal(row.Concerts, &concerts)
+	if len(row.Concerts) > 0 {
+		_ = json.Unmarshal(row.Concerts, &concerts)
+	}
 
-	genres, ok := row.Genres.([]string)
-	if !ok {
+	var genres []string
+	if row.Genres != nil {
+		switch v := row.Genres.(type) {
+		case []string:
+			genres = v
+		case []interface{}:
+			for _, item := range v {
+				if s, ok := item.(string); ok {
+					genres = append(genres, s)
+				}
+			}
+		default:
+			genres = []string{}
+		}
+	}
+
+	if genres == nil {
 		genres = []string{}
 	}
 

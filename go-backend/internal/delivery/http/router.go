@@ -44,7 +44,10 @@ func PostGroupProfileRouter(handler *GroupHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /feed", handler.GetFeed)
+	mux.HandleFunc("POST /feed/{id}/swipe", handler.UserSwipeGroup)
 	mux.HandleFunc("POST /media", handler.UploadGroupMedia)
+	mux.HandleFunc("GET /matches", handler.GetGroupMatches)
+	mux.HandleFunc("POST /swipe-user", handler.GroupSwipeUser)
 
 	return mux
 }
@@ -54,6 +57,7 @@ func AuthRouter(handler *AuthHandler) http.Handler {
 
 	mux.HandleFunc("POST /login", handler.Login)
 	mux.HandleFunc("POST /registry", handler.Registry)
+	mux.HandleFunc("POST /refresh", handler.Refresh)
 
 	return mux
 }

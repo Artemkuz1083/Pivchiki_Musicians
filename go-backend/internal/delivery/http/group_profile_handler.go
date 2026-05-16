@@ -132,35 +132,52 @@ func (h *GroupHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetFeed godoc
-// @Summary      Лента групп (для пользователей)
-// @Description  Возвращает список подходящих групп, которые текущий пользователь еще не лайкал/дизлайкал.
+// @Summary      Лента групп с фильтрацией (для пользователей)
+// @Description  Возвращает список подходящих музыкальных групп, которые текущий пользователь еще не лайкал/дизлайкал. Фильтрует по городам, жанрам и уровню серьезности.
 // @Tags         groups
 // @Produce      json
-// @Param        limit  query     int       false  "Лимит записей (по умолчанию 10)"
-// @Param        city   query     []string  false  "Фильтр по городам" collectionFormat(multi)
-// @Success      200    {array}   domain.FullGroupProfile
-// @Failure      401    {object}  ErrorMsg  "Не авторизован"
+// @Param        limit        query     int       false  "Лимит записей (1-25, по умолчанию 10)"
+// @Param        city         query     []string  false  "Фильтр по городам" collectionFormat(multi)
+// @Param        genre        query     []string  false  "Фильтр по жанрам" collectionFormat(multi)
+// @Param        seriousness  query     string    false  "Уровень серьезности"
+// @Success      200          {array}   domain.FullGroupProfile "Список подходящих групп"
+// @Failure      400          {object}  ErrorMsg  "Некорректный лимит или параметры фильтрации"
+// @Failure      401          {object}  ErrorMsg  "Пользователь не авторизован"
 // @Security     ApiKeyAuth
 // @Router       /api/v1/groups/feed [get]
 func (h *GroupHandler) GetFeed(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value("user_id").(uint64)
 	if !ok {
-		JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+		JSONError(w, ErrorMsg{Message: "Вы не авторизованы в системе"}, http.StatusUnauthorized)
 		return
 	}
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 10
+	strLimit := r.URL.Query().Get("limit")
+	limit, err := strconv.Atoi(strLimit)
+	if err != nil || limit <= 0 || limit > 25 {
+		if strLimit == "" {
+			limit = 10
+		} else {
+			JSONError(w, ErrorMsg{Message: "Некорректный лимит (допустимо от 1 до 25)"}, http.StatusBadRequest)
+			return
+		}
 	}
 
+	q := r.URL.Query()
+
 	filters := &domain.GroupProfileFilters{
-		Cities: r.URL.Query()["city"],
+		Cities: q["city"],
+		Genres: q["genre"],
+	}
+
+	if seriousnessStr := q.Get("seriousness"); seriousnessStr != "" {
+		seriousness := domain.LevelOfSeriousness(seriousnessStr)
+		filters.LevelOfSerious = &seriousness
 	}
 
 	profiles, err := h.Service.GetFeedGroup(domain.ProfileID(userID), limit, filters)
 	if err != nil {
-		JSONError(w, ErrorMsg{err.Error()}, http.StatusBadRequest)
+		JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
 		return
 	}
 
@@ -314,4 +331,122 @@ func (h *GroupHandler) UploadGroupMedia(w http.ResponseWriter, r *http.Request) 
 
 	// Возвращаем путь к файлу
 	renderJSON(w, http.StatusOK, map[string]string{"url": "/" + filePath})
+}
+
+// UserSwipeGroup godoc
+// @Summary      Свайпнуть группу пользователем (лайк/дизлайк)
+// @Description  Текущий авторизованный пользователь совершает действие (like/dislike) над выбранной группой. Возвращает информацию, случился ли мэтч.
+// @Tags         groups
+// @Accept       json
+// @Produce      json
+// @Param        id    path      int           true  "ID группы, которую свайпают"
+// @Param        body  body      SwipeRequest  true  "Действие: like или dislike"
+// @Success      200   {object}  domain.GroupSwipeResult "Результат свайпа (IsMatch: true/false)"
+// @Failure      400   {object}  ErrorMsg              "Некорректный JSON или ID"
+// @Failure      401   {object}  ErrorMsg              "Пользователь не авторизован"
+// @Failure      500   {object}  ErrorMsg              "Внутренняя ошибка сервера"
+// @Security     ApiKeyAuth
+// @Router       /api/v1/groups/feed/{id}/swipe [post]
+func (h *GroupHandler) UserSwipeGroup(w http.ResponseWriter, r *http.Request) {
+	targetGroupIDStr := r.PathValue("id")
+	targetGroupID, _ := strconv.ParseUint(targetGroupIDStr, 10, 64)
+
+	userID, ok := r.Context().Value("user_id").(uint64)
+	if !ok {
+		JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+		return
+	}
+
+	var input SwipeRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		JSONError(w, ErrorMsg{"Некорректный JSON"}, http.StatusBadRequest)
+		return
+	}
+
+	if input.Action != "like" && input.Action != "dislike" {
+		JSONError(w, ErrorMsg{"Action должен быть like или dislike"}, http.StatusBadRequest)
+		return
+	}
+
+	// Вызываем сервис. Метод Swipe возвращает *domain.GroupSwipeResult
+	result, err := h.Service.Swipe(domain.ProfileID(userID), domain.GroupID(targetGroupID), input.Action)
+	if err != nil {
+		JSONError(w, ErrorMsg{err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, result)
+}
+
+// GroupSwipeUser godoc
+// @Summary      Свайпнуть пользователя от имени группы
+// @Description  Администратор группы совершает действие (like/dislike) над музыкантом от лица конкретной группы.
+// @Tags         groups
+// @Accept       json
+// @Produce      json
+// @Param        body  body      GroupSwipeUserRequest  true  "Данные свайпа группы"
+// @Success      200   {object}  map[string]bool        "Результат: был ли это лайк и выполнен ли запрос успешнно"
+// @Failure      400   {object}  ErrorMsg               "Некорректный ввод"
+// @Failure      401   {object}  ErrorMsg               "Пользователь не авторизован"
+// @Failure      403   {object}  ErrorMsg               "Вы не являетесь владельцем/админом этой группы"
+// @Security     ApiKeyAuth
+// @Router       /api/v1/groups/swipe-user [post]
+func (h *GroupHandler) GroupSwipeUser(w http.ResponseWriter, r *http.Request) {
+	_, ok := r.Context().Value("user_id").(uint64)
+	if !ok {
+		JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+		return
+	}
+
+	var input GroupSwipeUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		JSONError(w, ErrorMsg{"Некорректный JSON"}, http.StatusBadRequest)
+		return
+	}
+
+	if input.Action != "like" && input.Action != "dislike" {
+		JSONError(w, ErrorMsg{"Action должен быть like или dislike"}, http.StatusBadRequest)
+		return
+	}
+	
+	// Предполагаем, что репозиторий/сервис отдаст (isLike bool, err error)
+	result, err := h.Service.Swipe(domain.ProfileID(input.TargetUserID), domain.GroupID(input.GroupID), input.Action)
+	if err != nil {
+		JSONError(w, ErrorMsg{err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, result)
+}
+
+// GetGroupMatches godoc
+// @Summary      Список взаимных лайков пользователя с группами
+// @Tags         groups
+// @Produce      json
+// @Success      200  {array}   domain.FullGroupProfile  "Список групп, с которыми есть мэтч"
+// @Failure      401  {object}  ErrorMsg                 "Пользователь не авторизован"
+// @Failure      500  {object}  ErrorMsg                 "Внутренняя ошибка сервера"
+// @Security     ApiKeyAuth
+// @Router       /api/v1/groups/matches [get]
+func (h *GroupHandler) GetGroupMatches(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value("user_id").(uint64)
+	if !ok {
+		JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+		return
+	}
+
+	matches, err := h.Service.GetMatches(domain.ProfileID(userID))
+	if err != nil {
+		JSONError(w, ErrorMsg{err.Error()}, http.StatusInternalServerError)
+		return
+	}
+
+	renderJSON(w, http.StatusOK, matches)
+}
+
+// GroupSwipeUserRequest структура для свайпа музыканта группой
+type GroupSwipeUserRequest struct {
+	GroupID      uint64 `json:"group_id" example:"6"`
+	TargetUserID uint64 `json:"target_user_id" example:"1"`
+	Action       string `json:"action" example:"like"`
 }
