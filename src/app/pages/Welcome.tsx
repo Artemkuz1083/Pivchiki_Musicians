@@ -1,9 +1,18 @@
 import { useNavigate } from 'react-router-dom'
 import { Music2, Eye, LogIn } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import { useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 export function Welcome() {
 	const navigate = useNavigate()
+	const { isLoggedIn } = useAuth();
+
+	useEffect(() => {
+    	if (isLoggedIn) {
+        	navigate('/profile', { replace: true });
+    	}
+	}, [isLoggedIn, navigate]);
 
 	return (
 		<div className='min-h-screen bg-gradient-to-br from-[#1E202C] to-[#60519B] flex flex-col items-center justify-center p-4'>

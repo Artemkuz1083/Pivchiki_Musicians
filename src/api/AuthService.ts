@@ -19,8 +19,35 @@ export const authService = {
     return data;
   },
 
+  //Обновление Access-токена через HttpOnly-куку
+  async refresh(): Promise<string | null> {
+    try {
+      // Отправляем пустой POST-запрос. Кука прикрепится автоматически благодаря withCredentials
+      const { data } = await api.post<{ token?: string; access_token?: string }>(
+        '/auth/refresh', 
+        {}, 
+        { withCredentials: true } // КРИТИЧЕСКИ ВАЖНО дляHttpOnly кук!
+      );
+
+      // Проверяем, как бэкенд назвал токен (token или access_token)
+      const newToken = data.token || data.access_token;
+
+      if (newToken) {
+        localStorage.setItem('authToken', newToken);
+        return newToken;
+      }
+      return null;
+    } catch (error) {
+      console.error('Не удалось обновить токен (сессия истекла):', error);
+      // Если рефреш-токен невалиден, чистим всё, чтобы юзер залогинился заново
+      this.logout();
+      return null;
+    }
+  },
+
   logout() {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('my_group_id'); // Подчищаем ID группы при выходе
   },
 
   isAuthenticated(): boolean {

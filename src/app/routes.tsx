@@ -12,6 +12,8 @@ import BandRegistration from './pages/BandRegistration'
 import GroupFeed from './pages/GroupsFeed'
 
 import { ProtectedRoute } from './ProtectedRoute'
+import { GroupCard } from './components/BandCard'
+import { GroupProfilePage } from './pages/GroupProfile'
 
 export const router = createBrowserRouter([
 	// PUBLIC
@@ -60,6 +62,10 @@ export const router = createBrowserRouter([
 				path: '/GroupFeed',
 				Component: GroupFeed,
 			},
+			{
+                path: '/groups/:id',
+                Component: GroupProfilePage, 
+            }
 		],
 	},
 ])

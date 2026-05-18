@@ -13,31 +13,65 @@ export default function BandRegistration() {
 		name: '',
 		description: '',
 		city: '',
-		year: 2024,
+		year: new Date().getFullYear(),
 		genres: [] as string[],
 		financial: 'POOR',
 		seriousness: 'HOBBY',
 	})
 
 	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault()
-		setLoading(true)
+    //Сразу намертво блокируем любой дефолтный экшен браузера
+    if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+    }
+    
+    
+    try {
+        setLoading(true);
+        console.log('Текущий formData:', formData);
 
-		try {
-			const group = await groupService.createGroup({
-				...formData,
-				year: Number(formData.year),
-			})
+        // На всякий случай проверяем, есть ли вообще groupService
+        if (!groupService || !groupService.createGroup) {
+            throw new Error('groupService или метод createGroup не импортирован или undefined!');
+        }
 
-			navigate(`/groups/${group.ID ?? group.ID}`)
-		} catch (err) {
-			console.error(err)
-			alert('Ошибка при создании группы')
-		} finally {
-			setLoading(false)
-		}
-	}
+        // Подготавливаем данные
+        const payload = {
+            ...formData,
+            year: Number(formData.year || new Date().getFullYear()),
+        };
+        console.log('Отправляем payload:', payload);
 
+        // 3. Сам запрос
+        const group = await groupService.createGroup(payload);
+        console.log('Бэкенд успешно ответил:', group);
+		localStorage.setItem('my_group_id', String(group.ID));
+        // Безопасно вытаскиваем ID
+        const groupId = group?.ID;
+        console.log('Распознанный groupId:', groupId);
+
+        if (groupId) {
+            console.log(`Переходим на: /groups/${groupId}`);
+            navigate(`/groups/${groupId}`);
+        } else {
+            console.warn('ID группы пустой в ответе бэкенда! Переходим в профиль.');
+            alert('Группа создана, но бэкенд не вернул ID. Переходим в профиль.');
+            navigate('/profile');
+        }
+
+    } catch (err: any) {
+        console.error('КРИТИЧЕСКАЯ ОШИБКА В ТЕЧЕНИИ SUBMIT:', err);
+        
+        // Выводим alert, чтобы заблокировать поток выполнения
+        const errorMessage = err?.message || 'Неизвестная ошибка';
+        const serverDetail = err?.response?.data ? JSON.stringify(err.response.data) : '';
+        
+        alert(`СТОП! Ошибка поймана:\n\nТекст: ${errorMessage}\n\nДетали сервера: ${serverDetail}`);
+    } finally {
+        console.log('=== END HANDLESUBMIT ===');
+        setLoading(false);
+    }
+};
 	return (
 		<div className='min-h-screen bg-gray-50 pb-10'>
 			{/* Header */}
@@ -141,18 +175,17 @@ export default function BandRegistration() {
 						</select>
 					</div>
 
-					{/* Submit */}
-					<Button
+					<button
 						type='submit'
 						disabled={loading}
-						className='w-full bg-[#60519B] hover:bg-[#4d3f7e] text-white py-7 text-lg rounded-xl shadow-sm'
+						className='w-full bg-[#60519B] hover:bg-[#4d3f7e] text-white py-7 text-lg rounded-xl shadow-sm flex items-center justify-center transition-colors disabled:opacity-50'
 					>
 						{loading ? (
 							<Loader2 className='animate-spin w-5 h-5' />
 						) : (
 							'Создать группу'
 						)}
-					</Button>
+					</button>
 				</form>
 			</div>
 		</div>

@@ -8,6 +8,13 @@ export function LoginPage() {
 	const [password, setPassword] = useState('')
 	const { login } = useAuth()
 	const navigate = useNavigate()
+	const { isLoggedIn } = useAuth();
+
+	useEffect(() => {
+    	if (isLoggedIn) {
+        	navigate('/profile', { replace: true });
+    	}
+	}, [isLoggedIn, navigate]);
 
 	const handleFormSubmit = async (e: React.FormEvent) => {
 		e.preventDefault()
