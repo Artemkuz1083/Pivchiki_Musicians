@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/katrinani/pivchiki-bot/backend/internal/domain"
+	"github.com/katrinani/pivchiki-bot/backend/internal/metrics"
 	"github.com/katrinani/pivchiki-bot/backend/internal/service"
 )
 
@@ -142,6 +143,8 @@ func (h *ProfileHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 // @Security     ApiKeyAuth
 // @Router       /api/v1/profile [post]
 func (h *ProfileHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
+	source := "web"
+
 	ctx := r.Context()
 	userID, ok := ctx.Value("user_id").(uint64)
 	if !ok {
@@ -188,8 +191,25 @@ func (h *ProfileHandler) CreateProfile(w http.ResponseWriter, r *http.Request) {
 		newProfile.Genres = []string{}
 	}
 
+	metrics.RegistrationUsername.WithLabelValues(source).Inc()
+	metrics.RegistrationCity.WithLabelValues(source).Inc()
+
+	if len(input.Instruments) > 0 {
+		metrics.RegistrationInstrument.WithLabelValues(source).Inc()
+		metrics.RegistrationInstrumentRating.WithLabelValues(source).Inc()
+	}
+
+	if len(input.Genres) > 0 {
+		metrics.RegistrationGenre.WithLabelValues(source).Inc()
+	}
+
+	if input.Contact != "" {
+		metrics.RegistrationContacts.WithLabelValues(source).Inc()
+	}
+
 	profile, err := h.Service.CreateUserProfile(newProfile)
 	if err != nil {
+		metrics.RegistrationErrors.WithLabelValues(source, "create_profile_step").Inc()
 		log.Printf("[HAND:CreateProfile:ERROR] Ошибка сервиса: %v", err)
 		JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
 		return
@@ -405,17 +425,17 @@ func (h *ProfileHandler) Swipe(w http.ResponseWriter, r *http.Request) {
 // @Security     ApiKeyAuth
 // @Router       /api/v1/profile/matches [get]
 func (h *ProfileHandler) GetMatches(w http.ResponseWriter, r *http.Request) {
-    userID, ok := r.Context().Value("user_id").(uint64)
-    if !ok {
-        JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
-        return
-    }
+	userID, ok := r.Context().Value("user_id").(uint64)
+	if !ok {
+		JSONError(w, ErrorMsg{"Unauthorized"}, http.StatusUnauthorized)
+		return
+	}
 
-    matches, err := h.Service.GetMatches(domain.ProfileID(userID))
-    if err != nil {
-        JSONError(w, ErrorMsg{err.Error()}, http.StatusInternalServerError)
-        return
-    }
+	matches, err := h.Service.GetMatches(domain.ProfileID(userID))
+	if err != nil {
+		JSONError(w, ErrorMsg{err.Error()}, http.StatusInternalServerError)
+		return
+	}
 
-    renderJSON(w, http.StatusOK, matches)
+	renderJSON(w, http.StatusOK, matches)
 }

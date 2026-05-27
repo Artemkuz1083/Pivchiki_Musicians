@@ -5,7 +5,9 @@ import (
 	"net/http"
 
 	"github.com/katrinani/pivchiki-bot/backend/internal/domain"
+	"github.com/katrinani/pivchiki-bot/backend/internal/metrics"
 	"github.com/katrinani/pivchiki-bot/backend/internal/service"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type AuthHandler struct {
@@ -29,35 +31,43 @@ func NewAuthHandler(s service.AccountService) *AuthHandler {
 // @Failure      409   {object}  delivery.ErrorMsg     "Логин уже занят или ошибка базы"
 // @Router       /api/v1/auth/registry [post]
 func (h *AuthHandler) Registry(w http.ResponseWriter, r *http.Request) {
-    var req AuthRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
-        return
-    }
+	source := "web"
+	metrics.RegistrationStarted.WithLabelValues(source).Inc()
 
-    accessToken, refreshToken, err := h.Service.Registry(&domain.Account{
-        Login:        req.Login,
-        PasswordHash: req.Password,
-    })
-    if err != nil {
-        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusConflict)
-        return
-    }
+	timer := prometheus.NewTimer(metrics.RegistrationDuration.WithLabelValues(source))
+	defer timer.ObserveDuration()
 
-    http.SetCookie(w, &http.Cookie{
-        Name:     "refresh_token",
-        Value:    refreshToken,
-        Path:     "/",
-        HttpOnly: true,
-        Secure:   false,
-        SameSite: http.SameSiteLaxMode,
-        MaxAge:   30 * 24 * 60 * 60,
-    })
+	var req AuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		metrics.RegistrationErrors.WithLabelValues(source, "json_parse").Inc()
+		JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
+		return
+	}
 
-    renderJSON(w, http.StatusCreated, AuthResponse{
-        Token:            accessToken,
-        IsProfileCreated: false,
-    })
+	accessToken, refreshToken, err := h.Service.Registry(&domain.Account{
+		Login:        req.Login,
+		PasswordHash: req.Password,
+	})
+	if err != nil {
+		metrics.RegistrationErrors.WithLabelValues(source, "db_error").Inc()
+		JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusConflict)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   30 * 24 * 60 * 60,
+	})
+
+	renderJSON(w, http.StatusCreated, AuthResponse{
+		Token:            accessToken,
+		IsProfileCreated: false,
+	})
 }
 
 // Login godoc
@@ -73,35 +83,35 @@ func (h *AuthHandler) Registry(w http.ResponseWriter, r *http.Request) {
 // @Failure      401   {object}  delivery.ErrorMsg     "Неверный логин или пароль"
 // @Router       /api/v1/auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-    var req AuthRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
-        return
-    }
+	var req AuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusBadRequest)
+		return
+	}
 
-    accessToken, refreshToken, hasProfile, err := h.Service.Login(&domain.Account{
-        Login:        req.Login,
-        PasswordHash: req.Password,
-    })
-    if err != nil {
-        JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusUnauthorized)
-        return
-    }
+	accessToken, refreshToken, hasProfile, err := h.Service.Login(&domain.Account{
+		Login:        req.Login,
+		PasswordHash: req.Password,
+	})
+	if err != nil {
+		JSONError(w, ErrorMsg{Message: err.Error()}, http.StatusUnauthorized)
+		return
+	}
 
-    http.SetCookie(w, &http.Cookie{
-        Name:     "refresh_token",
-        Value:    refreshToken,
-        Path:     "/",
-        HttpOnly: true,
-        Secure:   false,
-        SameSite: http.SameSiteLaxMode,
-        MaxAge:   30 * 24 * 60 * 60,
-    })
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   30 * 24 * 60 * 60,
+	})
 
-    renderJSON(w, http.StatusOK, AuthResponse{
-        Token:            accessToken,
-        IsProfileCreated: hasProfile,
-    })
+	renderJSON(w, http.StatusOK, AuthResponse{
+		Token:            accessToken,
+		IsProfileCreated: hasProfile,
+	})
 }
 
 // Refresh godoc
@@ -130,9 +140,9 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    newRefreshToken,
-		Path:     "/", // Доступно только для auth-ручек ради безопасности
-		HttpOnly: true,           // Защита от кражи через JS (XSS)
-		Secure:   false,          // Поставь true на продакшене (требует HTTPS)
+		Path:     "/",   // Доступно только для auth-ручек ради безопасности
+		HttpOnly: true,  // Защита от кражи через JS (XSS)
+		Secure:   false, // Поставь true на продакшене (требует HTTPS)
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   30 * 24 * 60 * 60, // 30 дней в секундах
 	})
